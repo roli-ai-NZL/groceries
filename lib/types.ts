@@ -74,8 +74,12 @@ export type ShoppingPayload = {
 export type PersistedState = {
   version: number;
   items: GroceryItem[];
+  /** ISO timestamp of the last local edit. Used for last-write-wins cloud sync. */
+  updatedAt?: string;
 };
 
 export const STORAGE_KEY = "roland-groceries-v1";
 export const THEME_KEY = "roland-groceries-theme";
+export const CLOUD_PAIR_KEY = "roland-groceries-cloud-paired";
 export const STATE_VERSION = 1;
+export const ACCESS_COOKIE = "roland_household_code";

@@ -54,3 +54,15 @@ export function sydneyTodayLabel(date = new Date()): string {
     month: "long",
   }).format(date);
 }
+
+export function sydneyDateTimeLabel(value: string | Date): string {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "unknown time";
+  return new Intl.DateTimeFormat("en-AU", {
+    timeZone: SYDNEY,
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
