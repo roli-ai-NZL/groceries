@@ -4,11 +4,12 @@ import { useMemo, useRef, useState } from "react";
 import { AddItemForm } from "./AddItemForm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ItemRow, categoryChipClass } from "./ItemRow";
+import { EstimateBill } from "./EstimateBill";
 import { OrderPrep } from "./OrderPrep";
 import { RecipeReview } from "./RecipeReview";
 import { RecipeSearch } from "./RecipeSearch";
 import { ThemeToggle } from "./ThemeToggle";
-import { CartIcon, DownloadIcon, RefreshIcon } from "./icons";
+import { CartIcon, DownloadIcon, ReceiptIcon, RefreshIcon } from "./icons";
 import { createId } from "@/lib/id";
 import { mergeRecipeIngredients } from "@/lib/merge";
 import { exportState, importState } from "@/lib/storage";
@@ -24,6 +25,7 @@ export function GroceryApp() {
   const [recipeNotice, setRecipeNotice] = useState("");
   const [draftIngredients, setDraftIngredients] = useState<RecipeIngredient[]>([]);
   const [orderOpen, setOrderOpen] = useState(false);
+  const [estimateOpen, setEstimateOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [toast, setToast] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
@@ -108,6 +110,14 @@ export function GroceryApp() {
             >
               <RefreshIcon className="h-4 w-4" />
               Reset week
+            </button>
+            <button
+              type="button"
+              onClick={() => setEstimateOpen(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-line bg-card px-4 text-sm font-medium"
+            >
+              <ReceiptIcon className="h-4 w-4" />
+              Estimate bill
             </button>
             <button
               type="button"
@@ -209,6 +219,7 @@ export function GroceryApp() {
       ) : null}
 
       {orderOpen ? <OrderPrep items={items} onClose={() => setOrderOpen(false)} /> : null}
+      {estimateOpen ? <EstimateBill items={items} onClose={() => setEstimateOpen(false)} /> : null}
 
       {resetOpen ? (
         <ConfirmDialog

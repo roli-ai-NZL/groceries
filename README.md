@@ -27,8 +27,15 @@ npm run lint
 2. **Every few weeks / monthly** — butter, oats, block cheese, minced garlic, stock, duck fat, pesto, sun-dried tomatoes, tomato paste, red wine, tortillas. These stay in their own sections. Toggle **Include this week** when you need them.
 3. **Recipe → ingredients** — type a dish name (for example `bolognese` or `carbonara`). The app looks up a typical version via [TheMealDB](https://www.themealdb.com/) (free, no key). Review quantities, drop lines, or mark “already have”, then merge. Matching names combine quantities when the units are obvious.
 4. **Reset week** — reloads the standing weekly staples and clears recipe/custom weekly items. Occasional and monthly include-toggles and store prefs are kept.
-5. **Prepare Coles / Woolies order** — copy a clean list or download JSON of unchecked, included items. An external agent can add those to a cart; you review substitutions/specials and check out yourself.
-6. **Export / import list** — backup or restore the full list as JSON.
+5. **Estimate bill** — prices unchecked items against Coles and Woolworths public product search (no cart, no login). Shows best-match product, pack size, AUD price, specials, and a store link. Totals for a Coles basket, a Woolies basket, and a cheapest mix. Swap an alternate match if the top hit looks wrong. Respects Coles / Woolies / Either preferences (the other store still appears as a comparison).
+6. **Prepare Coles / Woolies order** — copy a clean list or download JSON of unchecked, included items. An external agent can add those to a cart; you review substitutions/specials and check out yourself.
+7. **Export / import list** — backup or restore the full list as JSON.
+
+### Estimate caveat
+
+The bill is an **estimate**. Pack sizes and substitutions can differ from what you actually put in a trolley. Prices come from the same public search the store websites use and can change. Nothing is added to a cart and checkout stays with you. Results cache for about four hours so repeat estimates are gentle on the stores.
+
+If Woolworths returns “blocked” from some networks (their Akamai bot filter), retry from a home / Australian connection. Coles usually works without that.
 
 ### Pasta / bolognese note
 
