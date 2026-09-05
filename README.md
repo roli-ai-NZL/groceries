@@ -13,13 +13,79 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-No account is required. The list is saved in `localStorage` on this device.
+No account is required. Without extra setup the list is saved in `localStorage` on this device. To share one list across phone and laptop, add free Supabase sync below.
 
 ```bash
 npm run build   # production build
 npm run start   # serve the production build
 npm run lint
 ```
+
+## Cloud sync (free Supabase)
+
+One shared weekly list across devices: items, quantities, categories, checked state, store preference, and occasional/monthly include toggles.
+
+Auth is a **household access code** (a passphrase you choose). It is stored in Postgres as a bcrypt hash. The table is not publicly readable or writable — the app can only call two server functions, and those only succeed with the correct code. There is no magic-link login and no service-role key.
+
+If the Supabase env vars are missing, the app behaves exactly as before (this device only).
+
+### 1. Create a free Supabase project
+
+1. Sign in at [https://supabase.com](https://supabase.com) and **New project**.
+2. Wait until the project is ready. The free tier is enough.
+
+### 2. Run the schema
+
+1. In the Supabase dashboard open **SQL Editor → New query**.
+2. Paste the contents of [`supabase/schema.sql`](supabase/schema.sql).
+3. Replace `YOUR_HOUSEHOLD_ACCESS_CODE` with a long passphrase you will type on phone and laptop (at least 6 characters; longer is better). This is **not** your email password.
+4. Run the query once.
+
+Re-running the file will not overwrite an existing list or passphrase. To change the code later:
+
+```sql
+update public.household_lists
+set passphrase_hash = crypt('NEW_HOUSEHOLD_ACCESS_CODE', gen_salt('bf'))
+where id = 'roland';
+```
+
+Then unlock again on each device.
+
+### 3. Copy the API keys
+
+In Supabase go to **Project Settings → API**:
+
+- **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
+- **anon public** key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+Do **not** put the `service_role` key in Vercel or the app. It is not needed.
+
+### 4. Local env
+
+Copy `.env.example` to `.env.local` and fill in:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+```
+
+Restart `npm run dev`. Open the app, enter the household access code, and unlock sync.
+
+### 5. Vercel
+
+In the Vercel project: **Settings → Environment Variables**. Add the same two `NEXT_PUBLIC_…` values for **Production** (and Preview if you use it). Redeploy so the new values are baked into the client.
+
+After deploy, open the live site on phone and laptop, enter the same access code on each, and pick **upload this device** or **use the cloud list** the first time both already have data.
+
+### How sync behaves
+
+- Status pill: **Synced** / **Syncing** / **Offline** / **Error** / **This device only**.
+- Edits save to this device immediately, then debounce (~800ms) to the cloud.
+- Conflicts use **last write wins**. The pill shows when the cloud list was last saved (Sydney time). **Reload from cloud** is in the pill menu if you need the other device’s copy.
+- First connect: empty cloud → this device uploads. New device with no local save → downloads. Both already have a list → you choose.
+- Offline keeps working on `localStorage` and pushes when the network returns.
+
+The access code is kept in an http-only cookie on that browser for a year. **Stop syncing on this device** in the pill menu forgets it.
 
 ## How to use it
 
@@ -70,4 +136,4 @@ The “Prepare order” download is meant for a later cart-filling agent. Shape:
 
 ## Stack
 
-Next.js (App Router) · TypeScript · Tailwind CSS · localStorage for v1.
+Next.js (App Router) · TypeScript · Tailwind CSS · localStorage, plus optional Supabase (free tier) for cross-device sync.

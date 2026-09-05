@@ -6,7 +6,7 @@ import {
   type PersistedState,
 } from "./types";
 
-function isItem(value: unknown): value is GroceryItem {
+export function isGroceryItem(value: unknown): value is GroceryItem {
   if (!value || typeof value !== "object") return false;
   const item = value as GroceryItem;
   return (
@@ -20,30 +20,54 @@ function isItem(value: unknown): value is GroceryItem {
   );
 }
 
-export function loadState(): GroceryItem[] {
-  if (typeof window === "undefined") return DEFAULT_ITEMS;
+export function sanitizeItems(value: unknown): GroceryItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isGroceryItem);
+}
+
+export type LoadedState = {
+  items: GroceryItem[];
+  updatedAt: string | null;
+  hadLocalSave: boolean;
+};
+
+export function loadPersisted(): LoadedState {
+  if (typeof window === "undefined") {
+    return { items: DEFAULT_ITEMS, updatedAt: null, hadLocalSave: false };
+  }
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_ITEMS;
+    if (!raw) return { items: DEFAULT_ITEMS, updatedAt: null, hadLocalSave: false };
     const parsed = JSON.parse(raw) as PersistedState;
     if (!parsed || parsed.version !== STATE_VERSION || !Array.isArray(parsed.items)) {
-      return DEFAULT_ITEMS;
+      return { items: DEFAULT_ITEMS, updatedAt: null, hadLocalSave: false };
     }
-    const items = parsed.items.filter(isItem);
-    return items.length ? items : DEFAULT_ITEMS;
+    const items = sanitizeItems(parsed.items);
+    const updatedAt = typeof parsed.updatedAt === "string" ? parsed.updatedAt : null;
+    return {
+      items: items.length ? items : DEFAULT_ITEMS,
+      updatedAt,
+      hadLocalSave: true,
+    };
   } catch {
-    return DEFAULT_ITEMS;
+    return { items: DEFAULT_ITEMS, updatedAt: null, hadLocalSave: false };
   }
 }
 
-export function saveState(items: GroceryItem[]) {
+export function loadState(): GroceryItem[] {
+  return loadPersisted().items;
+}
+
+export function saveState(items: GroceryItem[], updatedAt?: string) {
   if (typeof window === "undefined") return;
   const payload: PersistedState = { version: STATE_VERSION, items };
+  if (updatedAt) payload.updatedAt = updatedAt;
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
-export function exportState(items: GroceryItem[]): string {
+export function exportState(items: GroceryItem[], updatedAt?: string | null): string {
   const payload: PersistedState = { version: STATE_VERSION, items };
+  if (updatedAt) payload.updatedAt = updatedAt;
   return JSON.stringify(payload, null, 2);
 }
 
@@ -52,7 +76,7 @@ export function importState(raw: string): GroceryItem[] {
   if (!parsed || !Array.isArray(parsed.items)) {
     throw new Error("That file is not a grocery list export.");
   }
-  const items = parsed.items.filter(isItem);
+  const items = sanitizeItems(parsed.items);
   if (!items.length) {
     throw new Error("No grocery items found in that file.");
   }

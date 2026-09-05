@@ -8,6 +8,7 @@ import { EstimateBill } from "./EstimateBill";
 import { OrderPrep } from "./OrderPrep";
 import { RecipeReview } from "./RecipeReview";
 import { RecipeSearch } from "./RecipeSearch";
+import { SyncBadge, SyncPanels } from "./SyncStatus";
 import { ThemeToggle } from "./ThemeToggle";
 import { CartIcon, DownloadIcon, ReceiptIcon, RefreshIcon } from "./icons";
 import { createId } from "@/lib/id";
@@ -15,11 +16,12 @@ import { mergeRecipeIngredients } from "@/lib/merge";
 import { exportState, importState } from "@/lib/storage";
 import { PASTA_NOTE, resetToStaples } from "@/lib/staples";
 import { CATEGORIES, type Category, type GroceryItem, type RecipeIngredient, type RecipeMatch } from "@/lib/types";
-import { useGroceryState } from "@/lib/useGroceryState";
+import { useGroceryState, useGrocerySync } from "@/lib/useGroceryState";
 import { sydneyTodayLabel, sydneyWeekLabel } from "@/lib/week";
 
 export function GroceryApp() {
   const [items, setItems] = useGroceryState();
+  const sync = useGrocerySync();
   const [hideChecked, setHideChecked] = useState(false);
   const [recipe, setRecipe] = useState<RecipeMatch | null>(null);
   const [recipeNotice, setRecipeNotice] = useState("");
@@ -71,8 +73,13 @@ export function GroceryApp() {
               Week of {sydneyWeekLabel()} · {sydneyTodayLabel()}
             </p>
           </div>
-          <ThemeToggle />
+          <div className="flex shrink-0 items-start gap-2">
+            <SyncBadge />
+            <ThemeToggle />
+          </div>
         </header>
+
+        <SyncPanels />
 
         <RecipeSearch onPick={pickRecipe} />
 
@@ -157,7 +164,13 @@ export function GroceryApp() {
         )}
 
         <footer className="no-print mt-2 flex flex-col gap-3 border-t border-line pt-5 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
-          <p>Saved on this device. No login — export a backup if you switch browsers.</p>
+          <p>
+            {sync.configured
+              ? sync.unlocked
+                ? "Shared across your devices when online. Last save wins if both edit at once."
+                : "Saved on this device until you unlock cloud sync with the household access code."
+              : "Saved on this device. Add Supabase env vars (README) to share across phone and laptop."}
+          </p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"

@@ -87,6 +87,34 @@ export function RefreshIcon(props: IconProps) {
   );
 }
 
+export function CloudIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M7.5 18h9.2A4.3 4.3 0 0 0 21 13.8c0-2.1-1.6-3.8-3.6-4.1A5.2 5.2 0 0 0 7.4 8.6 3.8 3.8 0 0 0 3 12.4 3.6 3.6 0 0 0 6.6 16"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function CloudOffIcon(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
+      <path
+        d="M7.5 18h9.2A4.3 4.3 0 0 0 21 13.8c0-1.3-.6-2.5-1.6-3.2M4 15.6A3.6 3.6 0 0 1 6.6 16M3 12.4A3.8 3.8 0 0 1 7.4 8.6a5.2 5.2 0 0 1 7.4-.7M5 5l14 14"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function ReceiptIcon(props: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" {...props}>
