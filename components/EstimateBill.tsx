@@ -33,7 +33,7 @@ type RowState = {
 type ClientCache = Record<string, { fetchedAt: number; payload: PriceSearchResponse }>;
 
 function cacheKey(item: GroceryItem) {
-  return `${item.name.toLowerCase()}|${item.quantity.toLowerCase()}`;
+  return `${item.name.toLowerCase()}|${item.quantity.toLowerCase()}|${item.category}`;
 }
 
 function readClientCache(): ClientCache {
@@ -104,7 +104,7 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
       if (!payload) {
         try {
           const response = await fetch(
-            `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(item.quantity)}`,
+            `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(item.quantity)}&category=${encodeURIComponent(item.category)}`,
           );
           payload = (await response.json()) as PriceSearchResponse;
           if (response.ok && (payload.coles.matches.length || payload.woolworths.matches.length)) {
@@ -155,7 +155,7 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
     );
     try {
       const response = await fetch(
-        `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(item.quantity)}&refresh=1`,
+        `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(item.quantity)}&category=${encodeURIComponent(item.category)}&refresh=1`,
       );
       const payload = (await response.json()) as PriceSearchResponse;
       const cache = readClientCache();

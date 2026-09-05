@@ -6,6 +6,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const query = url.searchParams.get("q")?.trim() ?? "";
   const quantity = url.searchParams.get("qty")?.trim() ?? "";
+  const category = url.searchParams.get("category")?.trim() ?? "";
   const refresh = url.searchParams.get("refresh") === "1";
 
   if (!query) {
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const result = await searchPrices(query, quantity, refresh);
+    const result = await searchPrices(query, quantity, refresh, category);
     return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Price lookup failed.";

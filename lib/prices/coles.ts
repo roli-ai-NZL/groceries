@@ -61,15 +61,15 @@ function toProduct(raw: ColesProduct): Omit<PricedProduct, "confidence"> | null 
   };
 }
 
-function rankColes(query: string, results: ColesProduct[], quantity?: string): PricedProduct[] {
+function rankColes(query: string, results: ColesProduct[], quantity?: string, category?: string): PricedProduct[] {
   const products = results
     .filter((item) => item._type === "PRODUCT" || item.pricing)
     .map(toProduct)
     .filter((item): item is Omit<PricedProduct, "confidence"> => Boolean(item));
-  return rankMatches(query, products, quantity);
+  return rankMatches(query, products, quantity, category);
 }
 
-async function searchBff(query: string, quantity?: string): Promise<PricedProduct[]> {
+async function searchBff(query: string, quantity?: string, category?: string): Promise<PricedProduct[]> {
   const url = new URL("https://www.coles.com.au/api/bff/products/search");
   url.searchParams.set("searchTerm", query);
   url.searchParams.set("storeId", COLES_STORE);
@@ -88,10 +88,10 @@ async function searchBff(query: string, quantity?: string): Promise<PricedProduc
     throw new Error(`Coles search returned ${response.status}`);
   }
   const data = (await response.json()) as { results?: ColesProduct[] };
-  return rankColes(query, data.results ?? [], quantity);
+  return rankColes(query, data.results ?? [], quantity, category);
 }
 
-async function searchHtml(query: string, quantity?: string): Promise<PricedProduct[]> {
+async function searchHtml(query: string, quantity?: string, category?: string): Promise<PricedProduct[]> {
   const url = `https://www.coles.com.au/search/products?q=${encodeURIComponent(query)}`;
   const response = await fetch(url, {
     headers: {
@@ -110,26 +110,30 @@ async function searchHtml(query: string, quantity?: string): Promise<PricedProdu
   const json = JSON.parse(match[1]) as {
     props?: { pageProps?: { searchResults?: { results?: ColesProduct[] } } };
   };
-  return rankColes(query, json.props?.pageProps?.searchResults?.results ?? [], quantity);
+  return rankColes(query, json.props?.pageProps?.searchResults?.results ?? [], quantity, category);
 }
 
-export async function searchColes(name: string, quantity?: string): Promise<StoreSearchResult> {
-  const query = searchQueryFor(name, quantity);
+async function firstMatches(query: string, quantity?: string, category?: string) {
   try {
-    const matches = await searchBff(query, quantity);
-    return { store: "Coles", matches };
-  } catch (first) {
-    try {
-      const matches = await searchHtml(query, quantity);
-      return { store: "Coles", matches };
-    } catch (second) {
-      const message =
-        second instanceof Error
-          ? second.message
-          : first instanceof Error
-            ? first.message
-            : "Coles lookup failed.";
-      return { store: "Coles", matches: [], error: message };
+    return await searchBff(query, quantity, category);
+  } catch {
+    return searchHtml(query, quantity, category);
+  }
+}
+
+export async function searchColes(name: string, quantity?: string, category?: string): Promise<StoreSearchResult> {
+  const query = searchQueryFor(name, quantity, category);
+  try {
+    let matches = await firstMatches(query, quantity, category);
+    if (!matches.length && query.toLowerCase() !== name.toLowerCase()) {
+      matches = await firstMatches(name, quantity, category);
     }
+    return { store: "Coles", matches };
+  } catch (error) {
+    return {
+      store: "Coles",
+      matches: [],
+      error: error instanceof Error ? error.message : "Coles lookup failed.",
+    };
   }
 }

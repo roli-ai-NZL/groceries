@@ -103,62 +103,70 @@ function toProduct(raw: WoolworthsProduct): Omit<PricedProduct, "confidence"> | 
   };
 }
 
-export async function searchWoolworths(name: string, quantity?: string): Promise<StoreSearchResult> {
-  const query = searchQueryFor(name, quantity);
+async function searchOnce(query: string, quantity?: string, category?: string): Promise<StoreSearchResult> {
+  const response = await fetch("https://www.woolworths.com.au/apis/ui/Search/products", {
+    method: "POST",
+    headers: {
+      ...BROWSER,
+      "content-type": "application/json",
+      referer: `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(query)}`,
+      ...(cookieJar ? { cookie: cookieJar } : {}),
+    },
+    body: JSON.stringify({
+      Filters: [],
+      IsSpecial: false,
+      Location: `/shop/search/products?searchTerm=${query}`,
+      PageNumber: 1,
+      PageSize: 24,
+      SearchTerm: query,
+      SortType: "TraderRelevance",
+      IsHideEverydayMarketProducts: false,
+      IsRegisteredRewardCardPromotion: null,
+      ExcludeSearchTypes: ["UntraceableVendors"],
+      GpBoost: 0,
+      GroupEdmVariants: false,
+      EnableAdReRanking: false,
+    }),
+    signal: AbortSignal.timeout(12000),
+    cache: "no-store",
+  });
+  applySetCookie(response);
+
+  if (response.status === 403) {
+    return {
+      store: "Woolworths",
+      matches: [],
+      error:
+        "Woolworths blocked this server (Akamai). Try Estimate bill from a home / Australian network — same search their site uses.",
+    };
+  }
+  if (!response.ok) {
+    return {
+      store: "Woolworths",
+      matches: [],
+      error: `Woolworths search returned ${response.status}.`,
+    };
+  }
+
+  const data = (await response.json()) as { Products?: WoolworthsGroup[] };
+  const products = (data.Products ?? [])
+    .flatMap((group) => group.Products ?? [])
+    .map(toProduct)
+    .filter((item): item is Omit<PricedProduct, "confidence"> => Boolean(item));
+
+  return { store: "Woolworths", matches: rankMatches(query, products, quantity, category) };
+}
+
+export async function searchWoolworths(name: string, quantity?: string, category?: string): Promise<StoreSearchResult> {
+  const query = searchQueryFor(name, quantity, category);
   await bootstrap();
 
   try {
-    const response = await fetch("https://www.woolworths.com.au/apis/ui/Search/products", {
-      method: "POST",
-      headers: {
-        ...BROWSER,
-        "content-type": "application/json",
-        referer: `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(query)}`,
-        ...(cookieJar ? { cookie: cookieJar } : {}),
-      },
-      body: JSON.stringify({
-        Filters: [],
-        IsSpecial: false,
-        Location: `/shop/search/products?searchTerm=${query}`,
-        PageNumber: 1,
-        PageSize: 24,
-        SearchTerm: query,
-        SortType: "TraderRelevance",
-        IsHideEverydayMarketProducts: false,
-        IsRegisteredRewardCardPromotion: null,
-        ExcludeSearchTypes: ["UntraceableVendors"],
-        GpBoost: 0,
-        GroupEdmVariants: false,
-        EnableAdReRanking: false,
-      }),
-      signal: AbortSignal.timeout(12000),
-      cache: "no-store",
-    });
-    applySetCookie(response);
-
-    if (response.status === 403) {
-      return {
-        store: "Woolworths",
-        matches: [],
-        error:
-          "Woolworths blocked this server (Akamai). Try Estimate bill from a home / Australian network — same search their site uses.",
-      };
+    let result = await searchOnce(query, quantity, category);
+    if (!result.matches.length && !result.error && query.toLowerCase() !== name.toLowerCase()) {
+      result = await searchOnce(name, quantity, category);
     }
-    if (!response.ok) {
-      return {
-        store: "Woolworths",
-        matches: [],
-        error: `Woolworths search returned ${response.status}.`,
-      };
-    }
-
-    const data = (await response.json()) as { Products?: WoolworthsGroup[] };
-    const products = (data.Products ?? [])
-      .flatMap((group) => group.Products ?? [])
-      .map(toProduct)
-      .filter((item): item is Omit<PricedProduct, "confidence"> => Boolean(item));
-
-    return { store: "Woolworths", matches: rankMatches(query, products, quantity) };
+    return result;
   } catch (error) {
     return {
       store: "Woolworths",
