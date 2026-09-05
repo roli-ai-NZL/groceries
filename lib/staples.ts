@@ -1,7 +1,10 @@
+import { quantityFieldsFrom } from "./quantity";
 import type { GroceryItem } from "./types";
 
-type Seed = Omit<GroceryItem, "checked" | "included" | "store"> & {
+type Seed = Omit<GroceryItem, "checked" | "included" | "store" | "count" | "unit"> & {
   included?: boolean;
+  count?: number;
+  unit?: string;
 };
 
 const WEEKLY: Seed[] = [
@@ -342,6 +345,7 @@ const MONTHLY: Seed[] = [
 function hydrate(seed: Seed): GroceryItem {
   return {
     ...seed,
+    ...quantityFieldsFrom(seed),
     store: "Either",
     checked: false,
     included: seed.included ?? true,
@@ -372,6 +376,8 @@ export function resetToStaples(current: GroceryItem[]): GroceryItem[] {
         included: prior?.included ?? false,
         store: prior?.store ?? "Either",
         checked: false,
+        count: seed.count,
+        unit: seed.unit,
         quantity: seed.quantity,
         note: seed.note,
       };

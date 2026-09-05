@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { applyQuantityPatch, quantityFieldsFrom } from "@/lib/quantity";
 import { CATEGORIES, type RecipeIngredient, type RecipeMatch } from "@/lib/types";
 import { CloseIcon } from "./icons";
+import { QuantityStepper } from "./QuantityStepper";
 
 type RecipeReviewProps = {
   recipe: RecipeMatch;
@@ -38,7 +40,7 @@ export function RecipeReview({
   }, [onClose]);
 
   function update(id: string, patch: Partial<RecipeIngredient>) {
-    onChange(ingredients.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    onChange(ingredients.map((item) => (item.id === id ? applyQuantityPatch(item, patch) : item)));
   }
 
   return (
@@ -59,8 +61,8 @@ export function RecipeReview({
               {recipe.name}
             </h2>
             <p className="mt-2 text-sm text-muted">
-              Review before merging. Mark pantry staples you already have, tweak quantities, or drop
-              lines.
+              Review before merging. Mark pantry staples you already have, tweak counts and units, or
+              drop lines.
             </p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full p-1 text-muted hover:text-ink" aria-label="Close">
@@ -90,17 +92,23 @@ export function RecipeReview({
                     />
                     Already have
                   </label>
-                  <div className="grid flex-1 gap-2 sm:grid-cols-[1fr_7rem_8rem]">
+                  <div className="grid flex-1 gap-2 sm:grid-cols-[1fr_auto_7rem_8rem]">
                     <input
                       value={item.name}
                       aria-label="Ingredient name"
                       onChange={(event) => update(item.id, { name: event.target.value })}
                       className="rounded-xl border border-line bg-card px-3 py-2 text-sm"
                     />
+                    <QuantityStepper
+                      count={quantityFieldsFrom(item).count}
+                      itemName={item.name}
+                      onChange={(count) => update(item.id, { count })}
+                    />
                     <input
-                      value={item.quantity}
-                      aria-label="Quantity"
-                      onChange={(event) => update(item.id, { quantity: event.target.value })}
+                      value={quantityFieldsFrom(item).unit}
+                      aria-label="Unit or pack size"
+                      placeholder="kg, bunch"
+                      onChange={(event) => update(item.id, { unit: event.target.value })}
                       className="rounded-xl border border-line bg-card px-3 py-2 text-sm"
                     />
                     <select
@@ -134,7 +142,7 @@ export function RecipeReview({
         <div className="flex flex-col gap-3 border-t border-line p-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted">
             {keep.length} ingredient{keep.length === 1 ? "" : "s"} will merge into this week.
-            Matching names combine quantities when obvious.
+            Matching names combine counts when the unit is the same.
           </p>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="rounded-full border border-line px-4 py-2.5 text-sm">

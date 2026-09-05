@@ -19,7 +19,12 @@ export type ItemSource = "staple" | "occasional" | "monthly" | "recipe" | "custo
 export type GroceryItem = {
   id: string;
   name: string;
+  /** Display quantity, e.g. `5×`, `1.4kg`, `2× 1.4kg`. Kept for older exports/sync. */
   quantity: string;
+  /** How many to buy. Min 1. Derived from `quantity` for older lists. */
+  count: number;
+  /** Optional pack size / unit (`kg`, `punnet`, `1.4kg`). */
+  unit: string;
   category: Category;
   store: StorePreference;
   checked: boolean;
@@ -35,6 +40,8 @@ export type RecipeIngredient = {
   id: string;
   name: string;
   quantity: string;
+  count: number;
+  unit: string;
   category: Category;
   alreadyHave: boolean;
   excluded: boolean;
@@ -54,6 +61,8 @@ export type RecipeMatch = {
 export type ShoppingPayloadItem = {
   name: string;
   quantity: string;
+  count: number;
+  unit?: string;
   category: Category;
   store: StorePreference;
   note?: string;
