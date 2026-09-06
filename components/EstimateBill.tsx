@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { shoppingItems } from "@/lib/export";
+import { itemDisplayQuantity, itemSearchQuantity } from "@/lib/quantity";
 import { estimateLineCost, formatAud } from "@/lib/prices/lineCost";
 import { isWeakMatch } from "@/lib/prices/match";
 import {
@@ -33,7 +34,7 @@ type RowState = {
 type ClientCache = Record<string, { fetchedAt: number; payload: PriceSearchResponse }>;
 
 function cacheKey(item: GroceryItem) {
-  return `${item.name.toLowerCase()}|${item.quantity.toLowerCase()}|${item.category}`;
+  return `${item.name.toLowerCase()}|${itemSearchQuantity(item).toLowerCase()}|${item.category}`;
 }
 
 function readClientCache(): ClientCache {
@@ -104,7 +105,7 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
       if (!payload) {
         try {
           const response = await fetch(
-            `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(item.quantity)}&category=${encodeURIComponent(item.category)}`,
+            `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(itemSearchQuantity(item))}&category=${encodeURIComponent(item.category)}`,
           );
           payload = (await response.json()) as PriceSearchResponse;
           if (response.ok && (payload.coles.matches.length || payload.woolworths.matches.length)) {
@@ -155,7 +156,7 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
     );
     try {
       const response = await fetch(
-        `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(item.quantity)}&category=${encodeURIComponent(item.category)}&refresh=1`,
+        `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(itemSearchQuantity(item))}&category=${encodeURIComponent(item.category)}&refresh=1`,
       );
       const payload = (await response.json()) as PriceSearchResponse;
       const cache = readClientCache();
@@ -203,8 +204,8 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
     for (const row of rows) {
       const colesProduct = pick(row.coles, row.colesId);
       const woolProduct = pick(row.woolworths, row.woolworthsId);
-      const colesCost = colesProduct ? estimateLineCost(colesProduct, row.item.quantity) : null;
-      const woolCost = woolProduct ? estimateLineCost(woolProduct, row.item.quantity) : null;
+      const colesCost = colesProduct ? estimateLineCost(colesProduct, itemSearchQuantity(row.item)) : null;
+      const woolCost = woolProduct ? estimateLineCost(woolProduct, itemSearchQuantity(row.item)) : null;
       const prefer = row.item.store;
 
       if ((prefer === "Coles" || prefer === "Either") && colesCost) {
@@ -349,7 +350,8 @@ function EstimateRow({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <p className="font-medium">
-            {row.item.name} <span className="text-sm font-normal text-muted">{row.item.quantity}</span>
+            {row.item.name}{" "}
+            <span className="text-sm font-normal text-muted">{itemDisplayQuantity(row.item)}</span>
           </p>
           <p className="text-xs text-muted">
             Preference: {row.item.store === "Woolworths" ? "Woolies" : row.item.store}
@@ -376,7 +378,7 @@ function EstimateRow({
             role={storeRole(row.item.store, "Coles")}
             matches={row.coles}
             selected={colesProduct}
-            quantity={row.item.quantity}
+            quantity={itemSearchQuantity(row.item)}
             onChoose={(id) => choose("coles", id)}
           />
           <StoreMatch
@@ -384,7 +386,7 @@ function EstimateRow({
             role={storeRole(row.item.store, "Woolworths")}
             matches={row.woolworths}
             selected={woolProduct}
-            quantity={row.item.quantity}
+            quantity={itemSearchQuantity(row.item)}
             onChoose={(id) => choose("woolworths", id)}
           />
         </div>

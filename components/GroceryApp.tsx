@@ -12,6 +12,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { CartIcon, DownloadIcon, ReceiptIcon, RefreshIcon } from "./icons";
 import { createId } from "@/lib/id";
 import { mergeRecipeIngredients } from "@/lib/merge";
+import { applyQuantityPatch } from "@/lib/quantity";
 import { exportState, importState } from "@/lib/storage";
 import { PASTA_NOTE, resetToStaples } from "@/lib/staples";
 import { CATEGORIES, type Category, type GroceryItem, type RecipeIngredient, type RecipeMatch } from "@/lib/types";
@@ -50,7 +51,9 @@ export function GroceryApp() {
   const inCart = items.filter((item) => item.included && item.checked).length;
 
   function updateItem(id: string, patch: Partial<GroceryItem>) {
-    setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
+    setItems((current) =>
+      current.map((item) => (item.id === id ? applyQuantityPatch(item, patch) : item)),
+    );
   }
 
   function pickRecipe(match: RecipeMatch, notice?: string) {

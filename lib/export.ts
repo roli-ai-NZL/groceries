@@ -1,3 +1,4 @@
+import { quantityFieldsFrom } from "./quantity";
 import { CATEGORIES, STORES, type GroceryItem, type ShoppingPayload } from "./types";
 
 export const AGENT_INSTRUCTIONS =
@@ -8,13 +9,18 @@ export function shoppingItems(items: GroceryItem[]) {
 }
 
 export function buildShoppingPayload(items: GroceryItem[]): ShoppingPayload {
-  const ready = shoppingItems(items).map((item) => ({
-    name: item.name,
-    quantity: item.quantity,
-    category: item.category,
-    store: item.store,
-    note: item.note,
-  }));
+  const ready = shoppingItems(items).map((item) => {
+    const fields = quantityFieldsFrom(item);
+    return {
+      name: item.name,
+      quantity: fields.quantity,
+      count: fields.count,
+      unit: fields.unit || undefined,
+      category: item.category,
+      store: item.store,
+      note: item.note,
+    };
+  });
 
   const byCategory: ShoppingPayload["byCategory"] = {};
   for (const category of CATEGORIES) {

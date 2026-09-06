@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { quantityFieldsFrom } from "@/lib/quantity";
 import { CATEGORIES, STORES, type Category, type GroceryItem } from "@/lib/types";
+import { QuantityStepper } from "./QuantityStepper";
 import { TrashIcon } from "./icons";
 
 type ItemRowProps = {
@@ -23,6 +25,7 @@ const CATEGORY_HINT: Partial<Record<Category, string>> = {
 export function ItemRow({ item, onChange, onDelete }: ItemRowProps) {
   const [editing, setEditing] = useState(false);
   const optional = item.source === "occasional" || item.source === "monthly";
+  const fields = quantityFieldsFrom(item);
 
   return (
     <li
@@ -40,18 +43,30 @@ export function ItemRow({ item, onChange, onDelete }: ItemRowProps) {
           aria-label={`${item.checked ? "Uncheck" : "Check off"} ${item.name}`}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <span className={`font-medium ${item.checked ? "text-muted line-through" : ""}`}>
-              {item.name}
-            </span>
-            <span className="text-sm text-muted">{item.quantity}</span>
-            {item.recipeName ? (
-              <span className="rounded-full bg-sage-soft px-2 py-0.5 text-[11px] text-sage">
-                {item.recipeName}
-              </span>
-            ) : null}
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className={`font-medium ${item.checked ? "text-muted line-through" : ""}`}>
+                  {item.name}
+                </span>
+                {fields.unit ? (
+                  <span className="text-sm text-muted">{fields.unit}</span>
+                ) : null}
+                {item.recipeName ? (
+                  <span className="rounded-full bg-sage-soft px-2 py-0.5 text-[11px] text-sage">
+                    {item.recipeName}
+                  </span>
+                ) : null}
+              </div>
+              {item.note ? <p className="mt-1 text-xs leading-5 text-muted">{item.note}</p> : null}
+            </div>
+            <QuantityStepper
+              count={fields.count}
+              itemName={item.name}
+              disabled={!item.included}
+              onChange={(count) => onChange(item.id, { count })}
+            />
           </div>
-          {item.note ? <p className="mt-1 text-xs leading-5 text-muted">{item.note}</p> : null}
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {optional ? (
@@ -104,7 +119,7 @@ export function ItemRow({ item, onChange, onDelete }: ItemRowProps) {
           </div>
 
           {editing ? (
-            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_7rem_9rem]">
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_8rem_9rem]">
               <input
                 value={item.name}
                 onChange={(event) => onChange(item.id, { name: event.target.value })}
@@ -112,9 +127,10 @@ export function ItemRow({ item, onChange, onDelete }: ItemRowProps) {
                 className="h-10 rounded-xl border border-line bg-paper px-3 text-sm"
               />
               <input
-                value={item.quantity}
-                onChange={(event) => onChange(item.id, { quantity: event.target.value })}
-                aria-label="Quantity"
+                value={fields.unit}
+                onChange={(event) => onChange(item.id, { unit: event.target.value })}
+                placeholder="kg, punnet, 1.4kg"
+                aria-label="Unit or pack size"
                 className="h-10 rounded-xl border border-line bg-paper px-3 text-sm"
               />
               <select

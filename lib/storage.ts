@@ -1,3 +1,4 @@
+import { withQuantityFields } from "./quantity";
 import { DEFAULT_ITEMS } from "./staples";
 import {
   STATE_VERSION,
@@ -20,6 +21,14 @@ function isItem(value: unknown): value is GroceryItem {
   );
 }
 
+export function normalizeGroceryItem(item: GroceryItem): GroceryItem {
+  return withQuantityFields(item);
+}
+
+function normalizeItems(items: GroceryItem[]): GroceryItem[] {
+  return items.map(normalizeGroceryItem);
+}
+
 export function loadState(): GroceryItem[] {
   if (typeof window === "undefined") return DEFAULT_ITEMS;
   try {
@@ -29,7 +38,7 @@ export function loadState(): GroceryItem[] {
     if (!parsed || parsed.version !== STATE_VERSION || !Array.isArray(parsed.items)) {
       return DEFAULT_ITEMS;
     }
-    const items = parsed.items.filter(isItem);
+    const items = normalizeItems(parsed.items.filter(isItem));
     return items.length ? items : DEFAULT_ITEMS;
   } catch {
     return DEFAULT_ITEMS;
@@ -52,7 +61,7 @@ export function importState(raw: string): GroceryItem[] {
   if (!parsed || !Array.isArray(parsed.items)) {
     throw new Error("That file is not a grocery list export.");
   }
-  const items = parsed.items.filter(isItem);
+  const items = normalizeItems(parsed.items.filter(isItem));
   if (!items.length) {
     throw new Error("No grocery items found in that file.");
   }

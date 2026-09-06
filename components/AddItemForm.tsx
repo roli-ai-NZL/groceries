@@ -1,13 +1,17 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { quantityFieldsFrom } from "@/lib/quantity";
 import { CATEGORIES, STORES, type Category, type StorePreference } from "@/lib/types";
 import { PlusIcon } from "./icons";
+import { QuantityStepper } from "./QuantityStepper";
 
 type AddItemFormProps = {
   onAdd: (item: {
     name: string;
     quantity: string;
+    count: number;
+    unit: string;
     category: Category;
     store: StorePreference;
   }) => void;
@@ -16,17 +20,29 @@ type AddItemFormProps = {
 export function AddItemForm({ onAdd }: AddItemFormProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [quantity, setQuantity] = useState("1");
+  const [count, setCount] = useState(1);
+  const [unit, setUnit] = useState("");
   const [category, setCategory] = useState<Category>("Other");
   const [store, setStore] = useState<StorePreference>("Either");
+
+  function reset() {
+    setName("");
+    setCount(1);
+    setUnit("");
+    setOpen(false);
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault();
     if (!name.trim()) return;
-    onAdd({ name: name.trim(), quantity: quantity.trim() || "1", category, store });
-    setName("");
-    setQuantity("1");
-    setOpen(false);
+    const fields = quantityFieldsFrom({ count, unit });
+    onAdd({
+      name: name.trim(),
+      ...fields,
+      category,
+      store,
+    });
+    reset();
   }
 
   if (!open) {
@@ -44,7 +60,7 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
 
   return (
     <form onSubmit={submit} className="paper-card w-full rounded-3xl p-4">
-      <div className="grid gap-2 sm:grid-cols-[1fr_7rem_9rem_8rem_auto]">
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto_8rem]">
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -53,13 +69,16 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
           autoFocus
           className="h-11 rounded-xl border border-line bg-paper px-3 text-sm"
         />
+        <QuantityStepper count={count} onChange={setCount} itemName={name || "new item"} />
         <input
-          value={quantity}
-          onChange={(event) => setQuantity(event.target.value)}
-          placeholder="Qty"
-          aria-label="Quantity"
+          value={unit}
+          onChange={(event) => setUnit(event.target.value)}
+          placeholder="kg, punnet, 1.4kg"
+          aria-label="Unit or pack size"
           className="h-11 rounded-xl border border-line bg-paper px-3 text-sm"
         />
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_8rem_auto]">
         <select
           value={category}
           onChange={(event) => setCategory(event.target.value as Category)}
@@ -88,7 +107,7 @@ export function AddItemForm({ onAdd }: AddItemFormProps) {
           </button>
           <button
             type="button"
-            onClick={() => setOpen(false)}
+            onClick={reset}
             className="h-11 rounded-xl border border-line px-3 text-sm"
           >
             Cancel

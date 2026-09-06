@@ -1,6 +1,6 @@
 import { categorizeIngredient } from "./categorize";
 import { createId } from "./id";
-import { combineQuantities } from "./quantity";
+import { combineItemQuantities, quantityFieldsFrom } from "./quantity";
 import type { GroceryItem, RecipeIngredient, StorePreference } from "./types";
 
 const ALIASES: Record<string, string> = {
@@ -78,10 +78,9 @@ export function mergeRecipeIngredients(
 
     if (matchIndex >= 0) {
       const existing = next[matchIndex];
-      const quantity = combineQuantities(existing.quantity, line.quantity);
       next[matchIndex] = {
         ...existing,
-        quantity,
+        ...combineItemQuantities(existing, line),
         included: true,
         checked: false,
         note: existing.note,
@@ -89,10 +88,11 @@ export function mergeRecipeIngredients(
       continue;
     }
 
+    const fields = quantityFieldsFrom(line);
     next.push({
       id: createId("recipe"),
       name: line.name,
-      quantity: line.quantity || "1",
+      ...fields,
       category: line.category || categorizeIngredient(line.name),
       store,
       checked: false,
@@ -112,7 +112,7 @@ export function toRecipeIngredient(
   return {
     id: createId("ing"),
     name,
-    quantity: quantity || "1",
+    ...quantityFieldsFrom({ quantity: quantity || "1" }),
     category: categorizeIngredient(name),
     alreadyHave: false,
     excluded: false,
