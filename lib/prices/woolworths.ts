@@ -1,13 +1,33 @@
+import { getApifyToken, searchWoolworthsViaApify } from "./apify";
+import { mergeCookieJar, readSetCookieHeaders } from "./cookies";
 import { rankMatches, searchQueryFor } from "./match";
 import type { PricedProduct, StoreSearchResult } from "./types";
+import {
+  classifyParsedWoolworthsBody,
+  classifyWoolworthsResponse,
+  decideWoolworthsFollowUp,
+  decideWoolworthsStart,
+  isConnectionReset,
+  isRetryableWoolworthsFailure,
+  type WoolworthsFailureKind,
+  woolworthsUnavailableMessage,
+} from "./woolworths-errors";
 
-const BROWSER = {
-  "user-agent":
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-  accept: "application/json, text/plain, */*",
-  "accept-language": "en-AU,en;q=0.9",
-  origin: "https://www.woolworths.com.au",
+const CHROME_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.6778.265 Safari/537.36";
+
+const SEC_CH = {
+  "sec-ch-ua": `"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"`,
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": `"Windows"`,
 };
+
+const WARM_URLS = [
+  "https://www.woolworths.com.au/shop",
+  "https://www.woolworths.com.au/shop/browse/fruit-vegetables",
+];
+
+const SEARCH_URL = "https://www.woolworths.com.au/apis/ui/Search/products";
 
 type WoolworthsProduct = {
   Stockcode?: number;
@@ -33,51 +53,96 @@ type WoolworthsGroup = {
   Name?: string;
 };
 
+export type WoolworthsDirectResult = StoreSearchResult & { kind: WoolworthsFailureKind };
+
+type FetchFn = typeof fetch;
+
 let cookieJar = "";
 let bootstrapped = false;
+let datacentreBlocked = false;
+let fetchImpl: FetchFn = fetch;
 
-function applySetCookie(response: Response) {
-  const getSetCookie = response.headers.getSetCookie?.bind(response.headers);
-  const cookies = getSetCookie ? getSetCookie() : [];
-  if (!cookies.length) {
-    const single = response.headers.get("set-cookie");
-    if (single) cookies.push(single);
-  }
-  const next = cookies
-    .map((entry) => entry.split(";")[0])
-    .filter(Boolean);
-  if (next.length) {
-    const merged = new Map(
-      `${cookieJar};${next.join(";")}`
-        .split(";")
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .map((part) => {
-          const idx = part.indexOf("=");
-          return [part.slice(0, idx), part] as const;
-        }),
-    );
-    cookieJar = [...merged.values()].join("; ");
-  }
+export function resetWoolworthsSession() {
+  cookieJar = "";
+  bootstrapped = false;
+  datacentreBlocked = false;
+  fetchImpl = fetch;
 }
 
-async function bootstrap() {
-  if (bootstrapped && cookieJar) return;
-  try {
-    const response = await fetch("https://www.woolworths.com.au/", {
-      headers: {
-        ...BROWSER,
-        accept: "text/html,application/xhtml+xml",
-      },
-      signal: AbortSignal.timeout(10000),
-      cache: "no-store",
-      redirect: "follow",
-    });
-    applySetCookie(response);
-    bootstrapped = true;
-  } catch {
-    bootstrapped = true;
+export function setWoolworthsFetch(fn: FetchFn) {
+  fetchImpl = fn;
+}
+
+export function isWoolworthsDatacentreBlocked() {
+  return datacentreBlocked;
+}
+
+function htmlHeaders(referer?: string): HeadersInit {
+  return {
+    "user-agent": CHROME_UA,
+    accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "accept-language": "en-AU,en;q=0.9",
+    "cache-control": "no-cache",
+    pragma: "no-cache",
+    "upgrade-insecure-requests": "1",
+    ...SEC_CH,
+    "sec-fetch-dest": "document",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-site": referer ? "same-origin" : "none",
+    "sec-fetch-user": "?1",
+    ...(referer ? { referer } : {}),
+    ...(cookieJar ? { cookie: cookieJar } : {}),
+  };
+}
+
+function apiHeaders(query: string): HeadersInit {
+  return {
+    "user-agent": CHROME_UA,
+    accept: "application/json, text/plain, */*",
+    "accept-language": "en-AU,en;q=0.9",
+    "content-type": "application/json",
+    origin: "https://www.woolworths.com.au",
+    referer: `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(query)}`,
+    ...SEC_CH,
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    ...(cookieJar ? { cookie: cookieJar } : {}),
+  };
+}
+
+function applySetCookie(response: Response) {
+  cookieJar = mergeCookieJar(cookieJar, readSetCookieHeaders(response.headers));
+}
+
+function markBlocked(kind: WoolworthsFailureKind) {
+  if (kind === "blocked") datacentreBlocked = true;
+}
+
+async function warmSession(force = false) {
+  if (force) {
+    cookieJar = "";
+    bootstrapped = false;
   }
+  if (bootstrapped && cookieJar) return;
+
+  let referer: string | undefined;
+  for (const url of WARM_URLS) {
+    try {
+      const response = await fetchImpl(url, {
+        headers: htmlHeaders(referer),
+        signal: AbortSignal.timeout(10000),
+        cache: "no-store",
+        redirect: "follow",
+      });
+      applySetCookie(response);
+      referer = url;
+    } catch {
+      // Still try the search POST — warm is best-effort.
+    }
+  }
+  bootstrapped = true;
 }
 
 function toProduct(raw: WoolworthsProduct): Omit<PricedProduct, "confidence"> | null {
@@ -103,15 +168,17 @@ function toProduct(raw: WoolworthsProduct): Omit<PricedProduct, "confidence"> | 
   };
 }
 
-async function searchOnce(query: string, quantity?: string, category?: string): Promise<StoreSearchResult> {
-  const response = await fetch("https://www.woolworths.com.au/apis/ui/Search/products", {
+function productsFromPayload(data: { Products?: WoolworthsGroup[] }): Omit<PricedProduct, "confidence">[] {
+  return (data.Products ?? [])
+    .flatMap((group) => group.Products ?? [])
+    .map(toProduct)
+    .filter((item): item is Omit<PricedProduct, "confidence"> => Boolean(item));
+}
+
+async function searchOnce(query: string, quantity?: string, category?: string): Promise<WoolworthsDirectResult> {
+  const response = await fetchImpl(SEARCH_URL, {
     method: "POST",
-    headers: {
-      ...BROWSER,
-      "content-type": "application/json",
-      referer: `https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(query)}`,
-      ...(cookieJar ? { cookie: cookieJar } : {}),
-    },
+    headers: apiHeaders(query),
     body: JSON.stringify({
       Filters: [],
       IsSpecial: false,
@@ -132,46 +199,128 @@ async function searchOnce(query: string, quantity?: string, category?: string): 
   });
   applySetCookie(response);
 
-  if (response.status === 403) {
+  const bodyText = await response.text();
+  const contentType = response.headers.get("content-type");
+  const kind = classifyWoolworthsResponse(response.status, bodyText, contentType);
+
+  if (kind === "blocked") {
     return {
       store: "Woolworths",
       matches: [],
-      error:
-        "Woolworths blocked this server (Akamai). Try Estimate bill from a home / Australian network — same search their site uses.",
+      kind,
+      error: "Woolworths blocked this server (Akamai).",
     };
   }
-  if (!response.ok) {
+  if (kind === "http") {
     return {
       store: "Woolworths",
       matches: [],
+      kind,
       error: `Woolworths search returned ${response.status}.`,
     };
   }
 
-  const data = (await response.json()) as { Products?: WoolworthsGroup[] };
-  const products = (data.Products ?? [])
-    .flatMap((group) => group.Products ?? [])
-    .map(toProduct)
-    .filter((item): item is Omit<PricedProduct, "confidence"> => Boolean(item));
+  let data: { Products?: WoolworthsGroup[] };
+  try {
+    data = JSON.parse(bodyText) as { Products?: WoolworthsGroup[] };
+  } catch {
+    return { store: "Woolworths", matches: [], kind: "empty", error: "Woolworths returned an empty or unreadable search." };
+  }
 
-  return { store: "Woolworths", matches: rankMatches(query, products, quantity, category) };
+  const parsedKind = classifyParsedWoolworthsBody(data);
+  const products = productsFromPayload(data);
+  const matches = rankMatches(query, products, quantity, category);
+  if (matches.length) return { store: "Woolworths", matches, kind: "ok" };
+  if (parsedKind === "empty") {
+    return { store: "Woolworths", matches: [], kind: "empty", error: "Woolworths returned an empty search." };
+  }
+  return { store: "Woolworths", matches: [], kind: "nomatch" };
 }
 
-export async function searchWoolworths(name: string, quantity?: string, category?: string): Promise<StoreSearchResult> {
+export async function searchWoolworthsDirect(
+  name: string,
+  quantity?: string,
+  category?: string,
+): Promise<WoolworthsDirectResult> {
   const query = searchQueryFor(name, quantity, category);
-  await bootstrap();
+  await warmSession();
 
   try {
     let result = await searchOnce(query, quantity, category);
-    if (!result.matches.length && !result.error && query.toLowerCase() !== name.toLowerCase()) {
-      result = await searchOnce(name, quantity, category);
+    if (isRetryableWoolworthsFailure(result.kind) && !result.matches.length) {
+      await warmSession(true);
+      result = await searchOnce(query, quantity, category);
     }
+    if (!result.matches.length && result.kind === "nomatch" && query.toLowerCase() !== name.toLowerCase()) {
+      const fallback = await searchOnce(name, quantity, category);
+      if (fallback.matches.length || fallback.kind !== "nomatch") result = fallback;
+    }
+    markBlocked(result.kind);
     return result;
   } catch (error) {
+    if (isConnectionReset(error)) {
+      try {
+        await warmSession(true);
+        return await searchOnce(query, quantity, category);
+      } catch (retryError) {
+        return {
+          store: "Woolworths",
+          matches: [],
+          kind: "reset",
+          error: retryError instanceof Error ? retryError.message : "Woolworths lookup failed.",
+        };
+      }
+    }
     return {
       store: "Woolworths",
       matches: [],
+      kind: "reset",
       error: error instanceof Error ? error.message : "Woolworths lookup failed.",
     };
   }
+}
+
+export async function searchWoolworths(
+  name: string,
+  quantity?: string,
+  category?: string,
+): Promise<StoreSearchResult> {
+  const hasToken = Boolean(getApifyToken());
+  const start = decideWoolworthsStart(datacentreBlocked, hasToken);
+
+  if (start === "unavailable") {
+    return { store: "Woolworths", matches: [], error: woolworthsUnavailableMessage(false) };
+  }
+
+  let direct: WoolworthsDirectResult | undefined;
+  if (start === "direct") {
+    direct = await searchWoolworthsDirect(name, quantity, category);
+  }
+
+  const followUp = decideWoolworthsFollowUp({
+    alreadyBlocked: start !== "direct" || datacentreBlocked,
+    hasToken,
+    kind: direct?.kind,
+    matchCount: direct?.matches.length ?? 0,
+  });
+
+  if (followUp === "use-matches" && direct) {
+    return { store: "Woolworths", matches: direct.matches };
+  }
+  if (followUp === "nomatch") {
+    return { store: "Woolworths", matches: [] };
+  }
+  if (followUp === "call-apify") {
+    const apify = await searchWoolworthsViaApify(name, quantity, category, { fetch: fetchImpl });
+    if (apify.matches.length) return apify;
+    return { store: "Woolworths", matches: [], error: woolworthsUnavailableMessage(true) };
+  }
+  if (followUp === "unavailable") {
+    return { store: "Woolworths", matches: [], error: woolworthsUnavailableMessage(false) };
+  }
+  return {
+    store: "Woolworths",
+    matches: [],
+    error: direct?.error ?? "Woolworths lookup failed.",
+  };
 }

@@ -42,7 +42,8 @@ export async function searchPrices(
   ]);
 
   const result: PriceSearchResponse = { query: name, coles, woolworths };
-  if (coles.matches.length || woolworths.matches.length) {
+  const storeError = Boolean(coles.error || woolworths.error);
+  if (!storeError && (coles.matches.length || woolworths.matches.length)) {
     setCachedPrice(result, quantity, category);
   }
   return result;
