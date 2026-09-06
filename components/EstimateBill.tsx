@@ -292,9 +292,6 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
               {wooliesStoreError ? <span className="font-medium">Woolies: {wooliesStoreError}</span> : null}
               {wooliesStoreError && colesStoreError ? <span className="mt-2 block" /> : null}
               {colesStoreError ? <span className="font-medium">Coles: {colesStoreError}</span> : null}
-              {wooliesStoreError && !colesStoreError ? (
-                <span className="mt-1 block text-ink/80">Coles prices still work. Tap Retry on a row to try Woolies again.</span>
-              ) : null}
             </p>
           ) : null}
 
