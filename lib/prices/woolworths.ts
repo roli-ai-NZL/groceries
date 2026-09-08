@@ -1,4 +1,4 @@
-import { getApifyToken, searchWoolworthsViaApify } from "./apify";
+import { getApifyToken, searchWoolworthsViaApify, searchWoolworthsViaApifyBatch } from "./apify";
 import { mergeCookieJar, readSetCookieHeaders } from "./cookies";
 import { rankMatches, searchQueryFor } from "./match";
 import type { PricedProduct, StoreSearchResult } from "./types";
@@ -312,8 +312,8 @@ export async function searchWoolworths(
   }
   if (followUp === "call-apify") {
     const apify = await searchWoolworthsViaApify(name, quantity, category, { fetch: fetchImpl });
-    if (apify.matches.length) return apify;
-    return { store: "Woolworths", matches: [], error: woolworthsUnavailableMessage(true) };
+    if (apify.matches.length || !apify.error) return apify;
+    return { store: "Woolworths", matches: [], error: apify.error };
   }
   if (followUp === "unavailable") {
     return { store: "Woolworths", matches: [], error: woolworthsUnavailableMessage(false) };
@@ -323,4 +323,62 @@ export async function searchWoolworths(
     matches: [],
     error: direct?.error ?? "Woolworths lookup failed.",
   };
+}
+
+function finalizeDirect(result: WoolworthsDirectResult, hasToken: boolean): StoreSearchResult {
+  if (result.matches.length) return { store: "Woolworths", matches: result.matches };
+  const followUp = decideWoolworthsFollowUp({
+    alreadyBlocked: datacentreBlocked,
+    hasToken,
+    kind: result.kind,
+    matchCount: result.matches.length,
+  });
+  if (followUp === "nomatch") return { store: "Woolworths", matches: [] };
+  if (followUp === "unavailable") {
+    return { store: "Woolworths", matches: [], error: woolworthsUnavailableMessage(false) };
+  }
+  if (followUp === "call-apify") {
+    return { store: "Woolworths", matches: [], error: woolworthsUnavailableMessage(true) };
+  }
+  return { store: "Woolworths", matches: [], error: result.error ?? "Woolworths lookup failed." };
+}
+
+export async function searchWoolworthsMany(
+  items: Array<{ name: string; quantity?: string; category?: string }>,
+): Promise<StoreSearchResult[]> {
+  if (!items.length) return [];
+  const hasToken = Boolean(getApifyToken());
+  const start = decideWoolworthsStart(datacentreBlocked, hasToken);
+
+  if (start === "unavailable") {
+    return items.map(() => ({ store: "Woolworths", matches: [], error: woolworthsUnavailableMessage(false) }));
+  }
+  if (start === "call-apify") {
+    return searchWoolworthsViaApifyBatch(items, { fetch: fetchImpl });
+  }
+
+  const directs = await Promise.all(
+    items.map((item) => searchWoolworthsDirect(item.name, item.quantity, item.category)),
+  );
+  const needsApify = directs.map((direct) => {
+    const followUp = decideWoolworthsFollowUp({
+      alreadyBlocked: datacentreBlocked,
+      hasToken,
+      kind: direct.kind,
+      matchCount: direct.matches.length,
+    });
+    return followUp === "call-apify";
+  });
+
+  if (needsApify.some(Boolean) && hasToken) {
+    const subset = items.filter((_, index) => needsApify[index]);
+    const apifyResults = await searchWoolworthsViaApifyBatch(subset, { fetch: fetchImpl });
+    let offset = 0;
+    return directs.map((direct, index) => {
+      if (!needsApify[index]) return finalizeDirect(direct, hasToken);
+      return apifyResults[offset++] ?? finalizeDirect(direct, hasToken);
+    });
+  }
+
+  return directs.map((direct) => finalizeDirect(direct, hasToken));
 }

@@ -39,8 +39,8 @@ The bill is an **estimate**. Pack sizes and substitutions can differ from what y
 Woolworths (Akamai) often blocks datacentre IPs such as Vercel. The app does **not** treat that as a $0 Woolies basket:
 
 1. **Direct search** — warms a browser-like session on `/shop` and `/shop/browse/fruit-vegetables`, sends Chrome / `en-AU` headers, and retries once after a re-warm on 403, empty, or connection reset.
-2. **Apify fallback** — if direct search is still blocked and `APIFY_TOKEN` is set, prices come from the [crawlerbros/woolworths-au-scraper](https://apify.com/crawlerbros/woolworths-au-scraper) actor (free Apify account; uses their datacentre proxy).
-3. **Explicit error** — if still blocked and there is no token, Estimate shows **Woolies unavailable** and how to add Apify. Coles prices still appear.
+2. **Apify fallback** — if direct search is still blocked and `APIFY_TOKEN` is set, Estimate prices the list in one pass via a few [crawlerbros/woolworths-au-scraper](https://apify.com/crawlerbros/woolworths-au-scraper) runs (free Apify account; uses their datacentre proxy). The first Estimate can take about a minute.
+3. **Explicit error** — if still blocked, Estimate shows **Woolies unavailable** plus the real Apify reason when a token is set (unauthorized / payment / actor missing / timeout). Coles prices still appear.
 
 See [Woolworths prices on hosted deploys](#woolworths-prices-on-hosted-deploys) below.
 
@@ -75,17 +75,23 @@ When direct search is still blocked, set `APIFY_TOKEN` so Estimate can call a Wo
 1. Create a free account at [Apify](https://console.apify.com/sign-up).
 2. Open [API & Integrations](https://console.apify.com/settings/integrations) and create a personal API token.
 3. Copy `.env.example` to `.env.local` and set `APIFY_TOKEN=...` for local runs.
-4. In Vercel: Project → Settings → Environment Variables → add `APIFY_TOKEN` for Production and Preview → **Redeploy**.
+4. In Vercel: Project → Settings → Environment Variables → add `APIFY_TOKEN` for Production and Preview → **Redeploy** (new env vars are not picked up until the next deploy).
+5. Open [crawlerbros/woolworths-au-scraper](https://apify.com/crawlerbros/woolworths-au-scraper) in the Apify console once and accept / try the actor. Store actors often need that first console open before an API token can run them.
 
-Default actor: `crawlerbros/woolworths-au-scraper`. Input used:
+Default actor: `crawlerbros/woolworths-au-scraper`. Estimate **does not** start one sync actor run per grocery line. It posts the whole list to `/api/prices/estimate`, then:
 
-```json
-{ "mode": "search", "searchQuery": "<item>", "maxItems": 12, "onSaleOnly": false }
-```
+- tries Woolies directly
+- if Akamai still blocks, starts **one async Apify run per unique search** when there are ≤4 queries, or **one `byCategory` run per grocery department** (typically 4–6) plus a few targeted fill-in searches for weak matches
+- polls the dataset instead of `run-sync-get-dataset-items` (those 55s sync calls were timing out on Vercel Hobby)
+- memoizes identical / in-flight queries for the life of the process (about four hours for successful datasets)
 
-Override with `APIFY_WOOLWORTHS_ACTOR` if you prefer another search actor (for example `dromb/woolworths-au-product-search-catalog-unofficial`, which expects `{ "operation": "search", "query": "<item>" }`).
+Expected latency: Coles is still a few seconds. The first Woolies-via-Apify Estimate is often **30–60 seconds**. Later Estimates reuse the server and browser caches.
 
-The actor run is slower than a direct POST (one run per item). Hobby-plan Vercel functions may time out; the price route sets `maxDuration` to 60 seconds for Pro. Free-plan Apify credits cover light personal use; each lookup spends a small amount of compute plus pay-per-result on the actor.
+Free-tier Apify limits still apply (compute + pay-per-result on the actor). A full-list fallback is a handful of runs, not 25. If credits or rental fail, Estimate shows the real reason (`401 unauthorized`, `402 payment required`, `404 actor not found`, timeout) instead of a generic “Apify fallback failed”.
+
+Override with `APIFY_WOOLWORTHS_ACTOR` if you prefer another search actor (for example `dromb/woolworths-au-product-search-catalog-unofficial`, which expects `{ "operation": "search", "query": "<item>" }`). Alternate actors are search-only.
+
+Add `?debug=1` to `/api/prices/search` or `/api/prices/estimate` to include `debug.apify` (`tokenPresent` boolean, `actorId`, `lastErrorCode`, `lastErrorStatus`, `runsStarted`, `strategy`). The token value is never returned.
 
 Without a token, a blocked Woolies lookup shows **Woolworths blocked this server (Akamai)** plus how to add Apify. Coles is unchanged and still priced.
 

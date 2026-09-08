@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { WOOLWORTHS_APIFY_FAILED, WOOLWORTHS_UNAVAILABLE_NO_TOKEN } from "./woolworths-errors";
+import { resetApifyClient } from "./apify";
+import { WOOLWORTHS_UNAVAILABLE_NO_TOKEN } from "./woolworths-errors";
 import { resetWoolworthsSession, searchWoolworths, setWoolworthsFetch } from "./woolworths";
 
 const PRODUCT_JSON = JSON.stringify({
@@ -37,6 +38,7 @@ function htmlDenied(status = 403) {
 
 afterEach(() => {
   resetWoolworthsSession();
+  resetApifyClient();
   delete process.env.APIFY_TOKEN;
 });
 
@@ -100,9 +102,13 @@ describe("searchWoolworths Apify fallback", () => {
       const url = String(input);
       if (url.includes("api.apify.com")) {
         apifyCalled = true;
-        return jsonResponse(
-          JSON.stringify([{ productId: "55", name: "Full Cream Milk 2L", price: 2.9, unit: "2L" }]),
-        );
+        if (url.includes("/acts/") && url.endsWith("/runs")) {
+          return jsonResponse(JSON.stringify({ data: { id: "run-1", status: "RUNNING", defaultDatasetId: "ds-1" } }));
+        }
+        if (url.includes("/actor-runs/")) {
+          return jsonResponse(JSON.stringify({ data: { id: "run-1", status: "SUCCEEDED", defaultDatasetId: "ds-1" } }));
+        }
+        return jsonResponse(JSON.stringify([{ productId: "55", name: "Full Cream Milk 2L", price: 2.9, unit: "2L" }]));
       }
       if (url.includes("/apis/ui/Search/products")) return htmlDenied(403);
       return new Response("ok", { status: 200 });
@@ -138,13 +144,16 @@ describe("searchWoolworths Apify fallback", () => {
     process.env.APIFY_TOKEN = "test-token";
     setWoolworthsFetch(async (input) => {
       const url = String(input);
-      if (url.includes("api.apify.com")) return new Response("nope", { status: 402 });
+      if (url.includes("api.apify.com")) {
+        return new Response(JSON.stringify({ error: { message: "Payment required" } }), { status: 402 });
+      }
       if (url.includes("/apis/ui/Search/products")) return htmlDenied(403);
       return new Response("ok", { status: 200 });
     });
 
     const result = await searchWoolworths("milk");
     assert.equal(result.matches.length, 0);
-    assert.equal(result.error, WOOLWORTHS_APIFY_FAILED);
+    assert.match(result.error ?? "", /402 payment required/);
+    assert.match(result.error ?? "", /Payment required/);
   });
 });

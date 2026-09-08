@@ -23,11 +23,28 @@ export type StoreSearchResult = {
   error?: string;
 };
 
+export type ApifyDebugInfo = {
+  tokenPresent: boolean;
+  actorId: string;
+  lastErrorCode?: string;
+  lastErrorStatus?: number;
+  runsStarted?: number;
+  strategy?: string;
+};
+
 export type PriceSearchResponse = {
   query: string;
   coles: StoreSearchResult;
   woolworths: StoreSearchResult;
   cached?: boolean;
+  debug?: { apify: ApifyDebugInfo };
+};
+
+export type PriceEstimateItemResult = PriceSearchResponse & { id: string };
+
+export type PriceEstimateResponse = {
+  results: PriceEstimateItemResult[];
+  debug?: { apify: ApifyDebugInfo };
 };
 
 export const PRICE_CACHE_TTL_MS = 4 * 60 * 60 * 1000;
