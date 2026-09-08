@@ -60,18 +60,6 @@ function storeRole(preference: StorePreference, store: "Coles" | "Woolworths") {
   return "compare" as const;
 }
 
-async function mapPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>) {
-  const queue = [...items];
-  await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (queue.length) {
-        const next = queue.shift();
-        if (next) await worker(next);
-      }
-    }),
-  );
-}
-
 export function EstimateBill({ items, onClose }: EstimateBillProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const ready = useMemo(() => shoppingItems(items), [items]);
@@ -97,61 +85,82 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
     let cancelled = false;
     const cache = readClientCache();
 
-    void mapPool(ready, 3, async (item) => {
-      const key = cacheKey(item);
-      const cached = cache[key];
-      let payload: PriceSearchResponse | null =
-        cached && Date.now() - cached.fetchedAt < PRICE_CACHE_TTL_MS ? cached.payload : null;
+    function rowFromPayload(item: GroceryItem, payload: PriceSearchResponse | null): RowState {
+      return {
+        item,
+        loading: false,
+        coles: payload?.coles.matches ?? [],
+        woolworths: payload?.woolworths.matches ?? [],
+        colesId: payload?.coles.matches[0]?.id,
+        woolworthsId: payload?.woolworths.matches[0]?.id,
+        colesError: payload?.coles.error,
+        woolworthsError: payload?.woolworths.error,
+        error: payload?.coles.error && payload?.woolworths.error ? "No prices returned." : undefined,
+      };
+    }
 
-      if (!payload) {
+    async function load() {
+      const payloads = new Map<string, PriceSearchResponse>();
+      const uncached: GroceryItem[] = [];
+      for (const item of ready) {
+        const cached = cache[cacheKey(item)];
+        if (cached && Date.now() - cached.fetchedAt < PRICE_CACHE_TTL_MS) {
+          payloads.set(item.id, cached.payload);
+        } else {
+          uncached.push(item);
+        }
+      }
+
+      if (uncached.length) {
         try {
-          const response = await fetch(
-            `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(itemSearchQuantity(item))}&category=${encodeURIComponent(item.category)}`,
-          );
-          payload = (await response.json()) as PriceSearchResponse;
-          if (
-            response.ok &&
-            !payload.coles.error &&
-            !payload.woolworths.error &&
-            (payload.coles.matches.length || payload.woolworths.matches.length)
-          ) {
-            cache[key] = { fetchedAt: Date.now(), payload };
-            writeClientCache(cache);
-          }
-        } catch (error) {
-          payload = {
-            query: item.name,
-            coles: { store: "Coles", matches: [], error: "Coles lookup failed." },
-            woolworths: {
-              store: "Woolworths",
-              matches: [],
-              error: error instanceof Error ? error.message : "Lookup failed.",
-            },
+          const response = await fetch("/api/prices/estimate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              items: uncached.map((item) => ({
+                id: item.id,
+                name: item.name,
+                qty: itemSearchQuantity(item),
+                category: item.category,
+              })),
+            }),
+          });
+          const data = (await response.json()) as {
+            results?: Array<PriceSearchResponse & { id?: string }>;
+            error?: string;
           };
+          if (!response.ok) {
+            throw new Error(data.error || "Estimate lookup failed.");
+          }
+          for (const result of data.results ?? []) {
+            if (!result.id) continue;
+            payloads.set(result.id, result);
+            if (!result.coles.error && !result.woolworths.error) {
+              const item = uncached.find((entry) => entry.id === result.id);
+              if (item && (result.coles.matches.length || result.woolworths.matches.length)) {
+                cache[cacheKey(item)] = { fetchedAt: Date.now(), payload: result };
+              }
+            }
+          }
+          writeClientCache(cache);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Lookup failed.";
+          for (const item of uncached) {
+            payloads.set(item.id, {
+              query: item.name,
+              coles: { store: "Coles", matches: [], error: "Coles lookup failed." },
+              woolworths: { store: "Woolworths", matches: [], error: message },
+            });
+          }
         }
       }
 
       if (cancelled) return;
-      setRows((current) =>
-        current.map((row) =>
-          row.item.id === item.id
-            ? {
-                item,
-                loading: false,
-                coles: payload?.coles.matches ?? [],
-                woolworths: payload?.woolworths.matches ?? [],
-                colesId: payload?.coles.matches[0]?.id,
-                woolworthsId: payload?.woolworths.matches[0]?.id,
-                colesError: payload?.coles.error,
-                woolworthsError: payload?.woolworths.error,
-                error: payload?.coles.error && payload?.woolworths.error ? "No prices returned." : undefined,
-              }
-            : row,
-        ),
-      );
-      setLoaded((count) => count + 1);
-    });
+      setRows(ready.map((item) => rowFromPayload(item, payloads.get(item.id) ?? null)));
+      setLoaded(ready.length);
+    }
 
+    void load();
     return () => {
       cancelled = true;
     };
@@ -324,6 +333,12 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
                 {totals.missing ? ` · ${totals.missing} with no usable match` : ""}
                 . Change a product if the top hit looks wrong — totals update immediately.
               </p>
+              {loaded < ready.length ? (
+                <p className="text-sm text-muted">
+                  Looking up Coles and Woolworths together. If Woolies is blocked, the first Apify
+                  Estimate can take about a minute.
+                </p>
+              ) : null}
               <ul className="space-y-3">
                 {rows.map((row) => (
                   <EstimateRow key={row.item.id} row={row} onRetry={() => retry(row.item)} onSelect={setRows} />
