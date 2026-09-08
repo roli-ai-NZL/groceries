@@ -57,6 +57,19 @@ describe("rankMatches protein and cut identity", () => {
     assert.ok(ranked.findIndex((item) => item.id === "breast") < ranked.findIndex((item) => item.id === "thigh"));
   });
 
+  it("ranks plain chicken breast above diced chicken breast", () => {
+    const ranked = rankMatches(
+      "Chicken breast",
+      [
+        product("diced", "Coles RSPCA Approved Chicken Breast Diced", "500g", 9),
+        product("breast", "Coles Chicken Breast Fillets", "500g", 9.5),
+      ],
+      "500g",
+      "Meat",
+    );
+    assert.equal(ranked[0]?.id, "breast");
+  });
+
   it("prefers bacon over unrelated meat when both are present", () => {
     const ranked = rankMatches(
       "Bacon",

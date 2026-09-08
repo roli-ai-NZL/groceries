@@ -123,8 +123,8 @@ const CUT_CANON: Record<string, string> = {
 const CUT_CONFLICTS: Record<string, ReadonlySet<string>> = {
   mince: new Set(["diced", "steak", "sausage", "breast", "thigh", "chop"]),
   diced: new Set(["mince", "steak", "sausage", "breast"]),
-  breast: new Set(["thigh", "wing", "drumstick", "mince", "sausage"]),
-  thigh: new Set(["breast", "wing", "drumstick", "mince", "sausage"]),
+  breast: new Set(["thigh", "wing", "drumstick", "mince", "sausage", "diced"]),
+  thigh: new Set(["breast", "wing", "drumstick", "mince", "sausage", "diced"]),
   steak: new Set(["mince", "diced", "sausage"]),
   sausage: new Set(["mince", "diced", "breast", "steak"]),
   wing: new Set(["breast", "thigh", "drumstick"]),
