@@ -28,7 +28,8 @@ type RowState = {
   woolworths: PricedProduct[];
   colesId?: string;
   woolworthsId?: string;
-  storeHint?: string;
+  colesError?: string;
+  woolworthsError?: string;
 };
 
 type ClientCache = Record<string, { fetchedAt: number; payload: PriceSearchResponse }>;
@@ -108,7 +109,12 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
             `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(itemSearchQuantity(item))}&category=${encodeURIComponent(item.category)}`,
           );
           payload = (await response.json()) as PriceSearchResponse;
-          if (response.ok && (payload.coles.matches.length || payload.woolworths.matches.length)) {
+          if (
+            response.ok &&
+            !payload.coles.error &&
+            !payload.woolworths.error &&
+            (payload.coles.matches.length || payload.woolworths.matches.length)
+          ) {
             cache[key] = { fetchedAt: Date.now(), payload };
             writeClientCache(cache);
           }
@@ -136,7 +142,8 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
                 woolworths: payload?.woolworths.matches ?? [],
                 colesId: payload?.coles.matches[0]?.id,
                 woolworthsId: payload?.woolworths.matches[0]?.id,
-                storeHint: [payload?.coles.error, payload?.woolworths.error].filter(Boolean).join(" "),
+                colesError: payload?.coles.error,
+                woolworthsError: payload?.woolworths.error,
                 error: payload?.coles.error && payload?.woolworths.error ? "No prices returned." : undefined,
               }
             : row,
@@ -159,9 +166,11 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
         `/api/prices/search?q=${encodeURIComponent(item.name)}&qty=${encodeURIComponent(itemSearchQuantity(item))}&category=${encodeURIComponent(item.category)}&refresh=1`,
       );
       const payload = (await response.json()) as PriceSearchResponse;
-      const cache = readClientCache();
-      cache[cacheKey(item)] = { fetchedAt: Date.now(), payload };
-      writeClientCache(cache);
+      if (!payload.coles.error && !payload.woolworths.error) {
+        const cache = readClientCache();
+        cache[cacheKey(item)] = { fetchedAt: Date.now(), payload };
+        writeClientCache(cache);
+      }
       setRows((current) =>
         current.map((row) =>
           row.item.id === item.id
@@ -172,7 +181,9 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
                 woolworths: payload.woolworths.matches,
                 colesId: payload.coles.matches[0]?.id,
                 woolworthsId: payload.woolworths.matches[0]?.id,
-                storeHint: [payload.coles.error, payload.woolworths.error].filter(Boolean).join(" "),
+                colesError: payload.coles.error,
+                woolworthsError: payload.woolworths.error,
+                error: payload.coles.error && payload.woolworths.error ? "No prices returned." : undefined,
               }
             : row,
         ),
@@ -244,6 +255,11 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
     return { coles, woolworths, mix, colesCount, woolworthsCount, mixCount, missing };
   }, [rows]);
 
+  const wooliesStoreError = rows.find((row) => row.woolworthsError && !row.loading)?.woolworthsError;
+  const colesStoreError = rows.find((row) => row.colesError && !row.loading)?.colesError;
+  const wooliesUnavailable = Boolean(wooliesStoreError) && totals.woolworthsCount === 0;
+  const colesUnavailable = Boolean(colesStoreError) && totals.colesCount === 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/45 p-0 sm:items-center sm:p-4">
       <button className="absolute inset-0 cursor-default" aria-label="Close estimate" onClick={onClose} />
@@ -271,9 +287,29 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <p className="rounded-2xl bg-gold/15 px-4 py-3 text-sm leading-6">{ESTIMATE_DISCLAIMER}</p>
 
+          {wooliesStoreError || colesStoreError ? (
+            <p role="alert" className="rounded-2xl bg-clay/10 px-4 py-3 text-sm leading-6 text-clay">
+              {wooliesStoreError ? <span className="font-medium">Woolies: {wooliesStoreError}</span> : null}
+              {wooliesStoreError && colesStoreError ? <span className="mt-2 block" /> : null}
+              {colesStoreError ? <span className="font-medium">Coles: {colesStoreError}</span> : null}
+            </p>
+          ) : null}
+
           <div className="grid gap-3 sm:grid-cols-3">
-            <TotalCard label="Coles basket" hint={`${totals.colesCount} priced`} amount={totals.coles} tone="coles" />
-            <TotalCard label="Woolies basket" hint={`${totals.woolworthsCount} priced`} amount={totals.woolworths} tone="woolies" />
+            <TotalCard
+              label="Coles basket"
+              hint={colesUnavailable ? "Coles unavailable" : `${totals.colesCount} priced`}
+              amount={totals.coles}
+              tone="coles"
+              unavailable={colesUnavailable}
+            />
+            <TotalCard
+              label="Woolies basket"
+              hint={wooliesUnavailable ? "Woolies unavailable" : `${totals.woolworthsCount} priced`}
+              amount={totals.woolworths}
+              tone="woolies"
+              unavailable={wooliesUnavailable}
+            />
             <TotalCard label="Cheapest mix" hint={`${totals.mixCount} priced`} amount={totals.mix} tone="mix" />
           </div>
 
@@ -306,18 +342,20 @@ function TotalCard({
   hint,
   amount,
   tone,
+  unavailable = false,
 }: {
   label: string;
   hint: string;
   amount: number;
   tone: "coles" | "woolies" | "mix";
+  unavailable?: boolean;
 }) {
   const ring =
     tone === "coles" ? "border-coles/40" : tone === "woolies" ? "border-woolies/40" : "border-sage/40";
   return (
     <div className={`rounded-2xl border bg-paper px-4 py-3 ${ring}`}>
       <p className="text-xs uppercase tracking-[0.14em] text-muted">{label}</p>
-      <p className="font-display mt-1 text-2xl">{formatAud(amount)}</p>
+      <p className="font-display mt-1 text-2xl">{unavailable ? "—" : formatAud(amount)}</p>
       <p className="text-xs text-muted">{hint}</p>
     </div>
   );
@@ -361,7 +399,9 @@ function EstimateRow({
         <button
           type="button"
           onClick={onRetry}
-          className="inline-flex items-center gap-1 text-xs text-sage"
+          className={`inline-flex items-center gap-1 text-xs ${
+            row.woolworthsError || row.colesError || row.error ? "font-semibold text-clay" : "text-sage"
+          }`}
           disabled={row.loading}
         >
           <RefreshIcon className="h-3.5 w-3.5" />
@@ -379,6 +419,7 @@ function EstimateRow({
             matches={row.coles}
             selected={colesProduct}
             quantity={itemSearchQuantity(row.item)}
+            error={row.colesError}
             onChoose={(id) => choose("coles", id)}
           />
           <StoreMatch
@@ -387,11 +428,11 @@ function EstimateRow({
             matches={row.woolworths}
             selected={woolProduct}
             quantity={itemSearchQuantity(row.item)}
+            error={row.woolworthsError}
             onChoose={(id) => choose("woolworths", id)}
           />
         </div>
       )}
-      {row.storeHint && !row.loading ? <p className="mt-2 text-xs text-muted">{row.storeHint}</p> : null}
     </li>
   );
 }
@@ -402,6 +443,7 @@ function StoreMatch({
   matches,
   selected,
   quantity,
+  error,
   onChoose,
 }: {
   store: "Coles" | "Woolworths";
@@ -409,6 +451,7 @@ function StoreMatch({
   matches: PricedProduct[];
   selected: PricedProduct | null;
   quantity: string;
+  error?: string;
   onChoose: (id: string) => void;
 }) {
   const cost = selected ? estimateLineCost(selected, quantity) : null;
@@ -431,7 +474,9 @@ function StoreMatch({
         ) : null}
       </div>
 
-      {!selected ? (
+      {error && !selected ? (
+        <p className="mt-2 text-sm text-clay">{error}</p>
+      ) : !selected ? (
         <p className="mt-2 text-sm text-muted">No match</p>
       ) : (
         <>
