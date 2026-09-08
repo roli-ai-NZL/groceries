@@ -8,6 +8,11 @@ export function shoppingItems(items: GroceryItem[]) {
   return items.filter((item) => item.included && !item.checked);
 }
 
+/** Estimate bill prices only rows Roland has checked. */
+export function estimateItems(items: GroceryItem[]) {
+  return items.filter((item) => item.checked === true);
+}
+
 export function buildShoppingPayload(items: GroceryItem[]): ShoppingPayload {
   const ready = shoppingItems(items).map((item) => {
     const fields = quantityFieldsFrom(item);

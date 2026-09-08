@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildShoppingPayload, formatShoppingList } from "./export";
+import { buildShoppingPayload, estimateItems, formatShoppingList, shoppingItems } from "./export";
 import type { GroceryItem } from "./types";
 
 const onion: GroceryItem = {
@@ -28,6 +28,31 @@ const brisket: GroceryItem = {
   included: true,
   source: "staple",
 };
+
+describe("estimateItems", () => {
+  it("prices only checked rows", () => {
+    const checkedOnion = { ...onion, checked: true };
+    const ready = estimateItems([checkedOnion, brisket, { ...brisket, id: "skip", included: false }]);
+    assert.deepEqual(
+      ready.map((item) => item.id),
+      ["onion"],
+    );
+  });
+
+  it("returns nothing when no rows are checked", () => {
+    assert.deepEqual(estimateItems([onion, brisket]), []);
+  });
+});
+
+describe("shoppingItems", () => {
+  it("still exports unchecked included items for order prep", () => {
+    const checkedOnion = { ...onion, checked: true };
+    assert.deepEqual(
+      shoppingItems([checkedOnion, brisket]).map((item) => item.id),
+      ["brisket"],
+    );
+  });
+});
 
 describe("buildShoppingPayload", () => {
   it("exports count, unit, and a display quantity that includes the count", () => {

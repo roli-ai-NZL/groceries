@@ -71,6 +71,110 @@ const SNACK_WORDS = [
   "marinade",
 ];
 
+const PROTEINS = new Set([
+  "beef",
+  "pork",
+  "chicken",
+  "lamb",
+  "turkey",
+  "duck",
+  "veal",
+  "fish",
+  "salmon",
+  "tuna",
+  "prawn",
+  "prawns",
+  "shrimp",
+  "kangaroo",
+]);
+
+const PRODUCT_KEYS = new Set(["bacon", "ham"]);
+
+const CUT_CANON: Record<string, string> = {
+  mince: "mince",
+  minced: "mince",
+  ground: "mince",
+  breast: "breast",
+  breasts: "breast",
+  thigh: "thigh",
+  thighs: "thigh",
+  diced: "diced",
+  cube: "diced",
+  cubes: "diced",
+  steak: "steak",
+  steaks: "steak",
+  chop: "chop",
+  chops: "chop",
+  wing: "wing",
+  wings: "wing",
+  drumstick: "drumstick",
+  drumsticks: "drumstick",
+  fillet: "fillet",
+  fillets: "fillet",
+  tenderloin: "fillet",
+  brisket: "brisket",
+  rib: "ribs",
+  ribs: "ribs",
+  sausage: "sausage",
+  sausages: "sausage",
+};
+
+/** Cuts that should not beat the query cut when both are present. Complementary words like "fillet" are omitted. */
+const CUT_CONFLICTS: Record<string, ReadonlySet<string>> = {
+  mince: new Set(["diced", "steak", "sausage", "breast", "thigh", "chop"]),
+  diced: new Set(["mince", "steak", "sausage", "breast"]),
+  breast: new Set(["thigh", "wing", "drumstick", "mince", "sausage"]),
+  thigh: new Set(["breast", "wing", "drumstick", "mince", "sausage"]),
+  steak: new Set(["mince", "diced", "sausage"]),
+  sausage: new Set(["mince", "diced", "breast", "steak"]),
+  wing: new Set(["breast", "thigh", "drumstick"]),
+  drumstick: new Set(["breast", "thigh", "wing"]),
+};
+
+const PREPARED_WORDS = new Set([
+  "ready",
+  "meal",
+  "meals",
+  "kit",
+  "kits",
+  "flavoured",
+  "flavored",
+  "flavour",
+  "flavor",
+  "crumbed",
+  "crumbed",
+  "southern",
+  "fried",
+  "marinated",
+  "seasoned",
+  "kiev",
+  "schnitzel",
+  "nugget",
+  "nuggets",
+  "tenders",
+  "stirfry",
+  "casserole",
+  "ragu",
+  "bolognese",
+  "curry",
+  "pie",
+  "pies",
+  "honey",
+  "smoky",
+  "chilli",
+  "chili",
+  "peri",
+  "bbq",
+  "teriyaki",
+  "satay",
+  "tempura",
+  "recipe",
+  "dinner",
+  "kitchen",
+]);
+
+const PRIVATE_LABEL = /\b(coles|woolworths|woolies|macro|essentials|homebrand|select)\b/i;
+
 export function searchQueryFor(name: string, quantity?: string, category?: string): string {
   const key = name.toLowerCase().replace(/\s+/g, " ").trim();
   let aliased = SEARCH_ALIASES[key] ?? name;
@@ -111,6 +215,114 @@ export function tokens(value: string): string[] {
     .filter((token) => token.length > 1 && !STOP.has(token) && !/^\d+$/.test(token));
 }
 
+function proteinSet(words: string[]): Set<string> {
+  return new Set(words.filter((word) => PROTEINS.has(word)));
+}
+
+function productKeySet(words: string[]): Set<string> {
+  return new Set(words.filter((word) => PRODUCT_KEYS.has(word)));
+}
+
+function cutSet(words: string[]): Set<string> {
+  const cuts = new Set<string>();
+  for (const word of words) {
+    const canon = CUT_CANON[word];
+    if (canon) cuts.add(canon);
+  }
+  return cuts;
+}
+
+function isStapleQuery(queryTokens: string[]): boolean {
+  if (queryTokens.some((token) => PREPARED_WORDS.has(token))) return false;
+  return (
+    queryTokens.some((token) => PROTEINS.has(token)) ||
+    queryTokens.some((token) => PRODUCT_KEYS.has(token)) ||
+    queryTokens.some((token) => Boolean(CUT_CANON[token]))
+  );
+}
+
+function preparedPenalty(name: string, queryTokens: string[]): number {
+  if (!isStapleQuery(queryTokens)) return 0;
+  const lower = name.toLowerCase();
+  let penalty = 0;
+  if (/made easy|meal kit|ready meal|dinner kit|recipe kit/.test(lower)) penalty += 0.34;
+  if (/crumbed|southern fried|marinated|tempura|kiev|schnitzel|nugget/.test(lower)) penalty += 0.3;
+  if (/flavou?r|honey|smoky|teriyaki|satay|peri peri|\bbbq\b|stir[\s-]?fry/.test(lower)) penalty += 0.18;
+  const extras = tokens(name).filter((word) => PREPARED_WORDS.has(word));
+  if (extras.length) penalty += Math.min(0.16, extras.length * 0.08);
+  return Math.min(penalty, 0.55);
+}
+
+function identityFit(queryTokens: string[], hay: string[]): { score: number; rank: number } {
+  const qProteins = proteinSet(queryTokens);
+  const pProteins = proteinSet(hay);
+  const qKeys = productKeySet(queryTokens);
+  const pKeys = productKeySet(hay);
+  const qCuts = cutSet(queryTokens);
+  const pCuts = cutSet(hay);
+
+  let score = 0;
+  let rank = 0;
+
+  if (qProteins.size) {
+    let matched = 0;
+    for (const protein of qProteins) {
+      if (pProteins.has(protein)) matched += 1;
+    }
+    if (matched === 0) {
+      score -= 0.28;
+      rank -= 2;
+    } else {
+      score += 0.2;
+      rank += 2;
+    }
+    for (const protein of pProteins) {
+      if (!qProteins.has(protein)) {
+        score -= 0.22;
+        rank -= 2;
+      }
+    }
+  }
+
+  if (qKeys.size) {
+    let matched = 0;
+    for (const key of qKeys) {
+      if (pKeys.has(key)) matched += 1;
+    }
+    if (matched === 0) {
+      score -= 0.32;
+      rank -= 2;
+    } else {
+      score += 0.22;
+      rank += 2;
+    }
+  }
+
+  if (qCuts.size) {
+    let matched = 0;
+    for (const cut of qCuts) {
+      if (pCuts.has(cut)) matched += 1;
+    }
+    if (matched === 0) {
+      score -= 0.28;
+      rank -= 1;
+    } else {
+      score += 0.14;
+      rank += 1;
+    }
+    for (const cut of pCuts) {
+      if (qCuts.has(cut)) continue;
+      const conflicts = [...qCuts].some((wanted) => CUT_CONFLICTS[wanted]?.has(cut));
+      if (conflicts) {
+        score -= 0.22;
+        rank -= 1;
+      }
+    }
+  }
+
+  return { score, rank };
+}
+
 export function scoreProduct(
   query: string,
   product: Omit<PricedProduct, "confidence">,
@@ -137,7 +349,18 @@ export function scoreProduct(
   if (category === "Meat" && extra.some((word) => ["chip", "chips", "pie", "nugget", "stock", "flavour", "flavor", "gravy", "meal", "rub", "fried", "crumbed", "southern"].includes(word))) {
     score -= 0.35;
   }
-  if (queryTokens.includes("beef") && extra.includes("pork")) score -= 0.25;
+
+  const identity = identityFit(queryTokens, hay);
+  score += identity.score;
+  score -= preparedPenalty(`${product.brand ?? ""} ${product.name}`, queryTokens);
+
+  if (isStapleQuery(queryTokens)) {
+    const extraNoise = extra.filter(
+      (word) => !PROTEINS.has(word) && !PRODUCT_KEYS.has(word) && !CUT_CANON[word] && !/^\d/.test(word),
+    );
+    if (extraNoise.length <= 1) score += 0.08;
+    if (PRIVATE_LABEL.test(`${product.brand ?? ""} ${product.name}`)) score += 0.04;
+  }
 
   if (quantity) {
     const wanted = parseQuantity(quantity);
@@ -150,7 +373,14 @@ export function scoreProduct(
     }
   }
 
-  return Math.max(0, Math.min(1, score));
+  return score;
+}
+
+function rankKey(
+  query: string,
+  product: Omit<PricedProduct, "confidence">,
+): number {
+  return identityFit(tokens(query), tokens(`${product.brand ?? ""} ${product.name} ${product.packSize}`)).rank;
 }
 
 export function rankMatches(
@@ -161,17 +391,29 @@ export function rankMatches(
   limit = 6,
 ): PricedProduct[] {
   return products
-    .map((product) => ({
-      ...product,
-      confidence: scoreProduct(query, product, quantity, category),
-    }))
+    .map((product) => {
+      const raw = scoreProduct(query, product, quantity, category);
+      return {
+        ...product,
+        confidence: Math.max(0, Math.min(1, raw)),
+        raw,
+        identityRank: rankKey(query, product),
+      };
+    })
     .filter((product) => product.price != null && product.confidence >= 0.22)
     .sort((a, b) => {
-      const diff = b.confidence - a.confidence;
+      if (a.identityRank !== b.identityRank) return b.identityRank - a.identityRank;
+      const diff = b.raw - a.raw;
       if (Math.abs(diff) > 0.04) return diff;
       return (a.price ?? 99) - (b.price ?? 99);
     })
-    .slice(0, limit);
+    .slice(0, limit)
+    .map((product) => {
+      const priced: PricedProduct = { ...product };
+      delete (priced as PricedProduct & { raw?: number }).raw;
+      delete (priced as PricedProduct & { identityRank?: number }).identityRank;
+      return priced;
+    });
 }
 
 export function isWeakMatch(product: PricedProduct | null | undefined): boolean {
