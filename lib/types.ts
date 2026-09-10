@@ -58,6 +58,13 @@ export type RecipeMatch = {
   ingredients: RecipeIngredient[];
 };
 
+export type ShoppingMatchedProduct = {
+  id: string;
+  name: string;
+  url?: string;
+  packSize?: string;
+};
+
 export type ShoppingPayloadItem = {
   name: string;
   quantity: string;
@@ -66,7 +73,15 @@ export type ShoppingPayloadItem = {
   category: Category;
   store: StorePreference;
   note?: string;
+  /** Top Coles / Woolies hits from the last Estimate, when still in the price cache. */
+  matched?: {
+    coles?: ShoppingMatchedProduct;
+    woolworths?: ShoppingMatchedProduct;
+  };
 };
+
+export const CART_STORES = ["Coles", "Woolworths", "Either"] as const;
+export type CartStore = (typeof CART_STORES)[number];
 
 export type ShoppingPayload = {
   generatedAt: string;
@@ -77,7 +92,7 @@ export type ShoppingPayload = {
   itemCount: number;
   items: ShoppingPayloadItem[];
   byCategory: Record<string, ShoppingPayloadItem[]>;
-  byStore: Record<string, ShoppingPayloadItem[]>;
+  byStore: Record<CartStore, ShoppingPayloadItem[]>;
 };
 
 export type PersistedState = {

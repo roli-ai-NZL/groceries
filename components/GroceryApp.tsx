@@ -5,6 +5,7 @@ import { AddItemForm } from "./AddItemForm";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ItemRow, categoryChipClass } from "./ItemRow";
 import { EstimateBill } from "./EstimateBill";
+import { FillCarts } from "./FillCarts";
 import { OrderPrep } from "./OrderPrep";
 import { RecipeReview } from "./RecipeReview";
 import { RecipeSearch } from "./RecipeSearch";
@@ -26,6 +27,7 @@ export function GroceryApp() {
   const [recipeNotice, setRecipeNotice] = useState("");
   const [draftIngredients, setDraftIngredients] = useState<RecipeIngredient[]>([]);
   const [orderOpen, setOrderOpen] = useState(false);
+  const [fillCartsOpen, setFillCartsOpen] = useState(false);
   const [estimateOpen, setEstimateOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [toast, setToast] = useState("");
@@ -47,8 +49,8 @@ export function GroceryApp() {
     })).filter((group) => group.items.length);
   }, [items, hideChecked]);
 
-  const toBuy = items.filter((item) => item.included && !item.checked).length;
-  const inCart = items.filter((item) => item.included && item.checked).length;
+  const selected = items.filter((item) => item.checked).length;
+  const listed = items.filter((item) => item.included).length;
 
   function updateItem(id: string, patch: Partial<GroceryItem>) {
     setItems((current) =>
@@ -81,8 +83,8 @@ export function GroceryApp() {
 
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted">
-            <span className="font-semibold text-ink">{toBuy} to buy</span>
-            {inCart ? ` · ${inCart} already bought / in cart` : ""}
+            <span className="font-semibold text-ink">{selected} selected</span>
+            {` for Estimate / carts · ${listed} on the list`}
           </p>
           <div className="flex flex-wrap gap-2">
             <AddItemForm
@@ -104,7 +106,7 @@ export function GroceryApp() {
               onClick={() => setHideChecked((value) => !value)}
               className="h-10 rounded-full border border-line bg-card px-4 text-sm"
             >
-              {hideChecked ? "Show checked" : "Hide checked"}
+              {hideChecked ? "Show selected" : "Hide selected"}
             </button>
             <button
               type="button"
@@ -125,10 +127,18 @@ export function GroceryApp() {
             <button
               type="button"
               onClick={() => setOrderOpen(true)}
-              className="inline-flex h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-paper"
+              className="inline-flex h-10 items-center gap-2 rounded-full border border-line bg-card px-4 text-sm font-medium"
             >
               <CartIcon className="h-4 w-4" />
               Prepare Coles / Woolies order
+            </button>
+            <button
+              type="button"
+              onClick={() => setFillCartsOpen(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-full bg-ink px-4 text-sm font-semibold text-paper"
+            >
+              <CartIcon className="h-4 w-4" />
+              Fill Coles / Woolies carts
             </button>
           </div>
         </section>
@@ -222,6 +232,7 @@ export function GroceryApp() {
       ) : null}
 
       {orderOpen ? <OrderPrep items={items} onClose={() => setOrderOpen(false)} /> : null}
+      {fillCartsOpen ? <FillCarts items={items} onClose={() => setFillCartsOpen(false)} /> : null}
       {estimateOpen ? <EstimateBill items={items} onClose={() => setEstimateOpen(false)} /> : null}
 
       {resetOpen ? (
@@ -271,7 +282,7 @@ function CategorySection({
       <div className="flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 font-display text-2xl">
           <span className={`rounded-full px-2.5 py-1 text-xs font-sans font-semibold ${categoryChipClass(category)}`}>
-            {items.filter((item) => item.included && !item.checked).length}
+            {items.filter((item) => item.checked).length}
           </span>
           {category}
         </h2>
