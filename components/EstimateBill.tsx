@@ -3,11 +3,15 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { estimateItems } from "@/lib/export";
 import { itemDisplayQuantity, itemSearchQuantity } from "@/lib/quantity";
+import {
+  priceCacheKey,
+  readClientPriceCache,
+  writeClientPriceCache,
+} from "@/lib/prices/clientCache";
 import { estimateLineCost, formatAud } from "@/lib/prices/lineCost";
 import { isWeakMatch } from "@/lib/prices/match";
 import {
   ESTIMATE_DISCLAIMER,
-  PRICE_CACHE_KEY,
   PRICE_CACHE_TTL_MS,
   type PriceSearchResponse,
   type PricedProduct,
@@ -31,24 +35,6 @@ type RowState = {
   colesError?: string;
   woolworthsError?: string;
 };
-
-type ClientCache = Record<string, { fetchedAt: number; payload: PriceSearchResponse }>;
-
-function cacheKey(item: GroceryItem) {
-  return `${item.name.toLowerCase()}|${itemSearchQuantity(item).toLowerCase()}|${item.category}`;
-}
-
-function readClientCache(): ClientCache {
-  try {
-    return JSON.parse(window.localStorage.getItem(PRICE_CACHE_KEY) ?? "{}") as ClientCache;
-  } catch {
-    return {};
-  }
-}
-
-function writeClientCache(cache: ClientCache) {
-  window.localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(cache));
-}
 
 function pick(matches: PricedProduct[], id?: string) {
   return matches.find((product) => product.id === id) ?? matches[0] ?? null;
@@ -83,7 +69,7 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
 
   useEffect(() => {
     let cancelled = false;
-    const cache = readClientCache();
+    const cache = readClientPriceCache();
 
     function rowFromPayload(item: GroceryItem, payload: PriceSearchResponse | null): RowState {
       return {
@@ -103,7 +89,7 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
       const payloads = new Map<string, PriceSearchResponse>();
       const uncached: GroceryItem[] = [];
       for (const item of ready) {
-        const cached = cache[cacheKey(item)];
+        const cached = cache[priceCacheKey(item)];
         if (cached && Date.now() - cached.fetchedAt < PRICE_CACHE_TTL_MS) {
           payloads.set(item.id, cached.payload);
         } else {
@@ -138,11 +124,11 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
             if (!result.coles.error && !result.woolworths.error) {
               const item = uncached.find((entry) => entry.id === result.id);
               if (item && (result.coles.matches.length || result.woolworths.matches.length)) {
-                cache[cacheKey(item)] = { fetchedAt: Date.now(), payload: result };
+                cache[priceCacheKey(item)] = { fetchedAt: Date.now(), payload: result };
               }
             }
           }
-          writeClientCache(cache);
+          writeClientPriceCache(cache);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Lookup failed.";
           for (const item of uncached) {
@@ -176,9 +162,9 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
       );
       const payload = (await response.json()) as PriceSearchResponse;
       if (!payload.coles.error && !payload.woolworths.error) {
-        const cache = readClientCache();
-        cache[cacheKey(item)] = { fetchedAt: Date.now(), payload };
-        writeClientCache(cache);
+        const cache = readClientPriceCache();
+        cache[priceCacheKey(item)] = { fetchedAt: Date.now(), payload };
+        writeClientPriceCache(cache);
       }
       setRows((current) =>
         current.map((row) =>

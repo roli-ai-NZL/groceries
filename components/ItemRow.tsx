@@ -29,8 +29,12 @@ export function ItemRow({ item, onChange, onDelete }: ItemRowProps) {
 
   return (
     <li
-      className={`rounded-2xl border border-line bg-card p-3 ${
-        !item.included ? "opacity-55" : ""
+      className={`rounded-2xl border p-3 ${
+        !item.included
+          ? "border-line bg-card opacity-55"
+          : item.checked
+            ? "border-sage/45 bg-sage-soft/70"
+            : "border-line bg-card"
       }`}
     >
       <div className="flex items-start gap-3">
@@ -40,13 +44,13 @@ export function ItemRow({ item, onChange, onDelete }: ItemRowProps) {
           disabled={!item.included}
           onChange={(event) => onChange(item.id, { checked: event.target.checked })}
           className="mt-1 h-5 w-5 accent-sage"
-          aria-label={`${item.checked ? "Uncheck" : "Check off"} ${item.name}`}
+          aria-label={`${item.checked ? "Deselect" : "Select"} ${item.name} for this shop`}
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className={`font-medium ${item.checked ? "text-muted line-through" : ""}`}>
+                <span className={`font-medium ${item.checked ? "text-ink" : ""}`}>
                   {item.name}
                 </span>
                 {fields.unit ? (
