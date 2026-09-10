@@ -84,7 +84,7 @@ export function GroceryApp() {
         <section className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted">
             <span className="font-semibold text-ink">{selected} selected</span>
-            {` for Estimate / carts · ${listed} on the list`}
+            {` · ${listed} on the list`}
           </p>
           <div className="flex flex-wrap gap-2">
             <AddItemForm
