@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { shoppingItems } from "@/lib/export";
+import { estimateItems } from "@/lib/export";
 import { itemDisplayQuantity, itemSearchQuantity } from "@/lib/quantity";
 import { estimateLineCost, formatAud } from "@/lib/prices/lineCost";
 import { isWeakMatch } from "@/lib/prices/match";
@@ -62,7 +62,7 @@ function storeRole(preference: StorePreference, store: "Coles" | "Woolworths") {
 
 export function EstimateBill({ items, onClose }: EstimateBillProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const ready = useMemo(() => shoppingItems(items), [items]);
+  const ready = useMemo(() => estimateItems(items), [items]);
   const [rows, setRows] = useState<RowState[]>(() =>
     ready.map((item) => ({ item, loading: true, coles: [], woolworths: [] })),
   );
@@ -282,7 +282,7 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
       >
         <div className="flex items-start justify-between gap-4 border-b border-line p-5">
           <div>
-            <p className="text-xs uppercase tracking-[0.16em] text-muted">Estimate · AUD</p>
+            <p className="text-xs uppercase tracking-[0.16em] text-muted">Estimate · AUD · checked items</p>
             <h2 id="estimate-title" className="font-display mt-1 flex items-center gap-2 text-2xl sm:text-3xl">
               <ReceiptIcon className="h-7 w-7" />
               Estimate this week’s bill
@@ -324,7 +324,7 @@ export function EstimateBill({ items, onClose }: EstimateBillProps) {
 
           {ready.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-line px-4 py-10 text-center text-muted">
-              Nothing to price. Uncheck items or include an occasional staple first.
+              Check the items you want priced, then Estimate bill.
             </p>
           ) : (
             <>
