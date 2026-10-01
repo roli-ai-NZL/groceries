@@ -1,5 +1,5 @@
 import { priceCacheKey, type ClientPriceCache } from "./prices/clientCache";
-import type { PricedProduct } from "./prices/types";
+import { PRICE_CACHE_TTL_MS, type PricedProduct } from "./prices/types";
 import { quantityFieldsFrom } from "./quantity";
 import {
   CART_STORES,
@@ -47,6 +47,7 @@ export function matchedProductsFromCache(
   if (!cache) return undefined;
   const entry = cache[priceCacheKey(item)];
   if (!entry) return undefined;
+  if (Date.now() - entry.fetchedAt >= PRICE_CACHE_TTL_MS) return undefined;
   const coles = compactMatch(entry.payload.coles.matches[0]);
   const woolworths = compactMatch(entry.payload.woolworths.matches[0]);
   if (!coles && !woolworths) return undefined;

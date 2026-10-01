@@ -197,6 +197,37 @@ describe("buildShoppingPayload", () => {
     const payload = buildShoppingPayload([{ ...onion, checked: true }], { estimateCache: {} });
     assert.equal(payload.items[0]?.matched, undefined);
   });
+
+  it("omits matched when the last Estimate cache entry is older than the TTL", () => {
+    const item = { ...brisket, checked: true };
+    const cache: ClientPriceCache = {
+      [priceCacheKey(item)]: {
+        fetchedAt: Date.now() - 5 * 60 * 60 * 1000,
+        payload: {
+          query: "Brisket",
+          coles: {
+            store: "Coles",
+            matches: [
+              {
+                store: "Coles",
+                id: "stale-brisket",
+                name: "Old Brisket",
+                packSize: "1.4kg",
+                price: 24,
+                onSpecial: false,
+                available: true,
+                confidence: 0.9,
+                url: "https://www.coles.com.au/stale",
+              },
+            ],
+          },
+          woolworths: { store: "Woolworths", matches: [] },
+        },
+      },
+    };
+    const payload = buildShoppingPayload([item], { estimateCache: cache });
+    assert.equal(payload.items[0]?.matched, undefined);
+  });
 });
 
 describe("formatAgentBrief", () => {
