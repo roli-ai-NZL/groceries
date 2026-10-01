@@ -128,7 +128,7 @@ Without a token, a blocked Woolies lookup shows **Woolworths blocked this server
 }
 ```
 
-`byStore` always includes those three keys. Coles-only and Woolies-only stay in their lists. **Either** is a shared bucket — the agent chooses one supermarket and should not add the same line to both trolleys. `matched` is omitted when there is no last-Estimate cache hit.
+`byStore` always includes those three keys. Coles-only and Woolies-only stay in their lists. **Either** is a shared bucket — the agent chooses one supermarket and should not add the same line to both trolleys. `matched` is omitted when there is no last-Estimate cache hit, or when that cache is older than about four hours.
 
 ## Stack
 
