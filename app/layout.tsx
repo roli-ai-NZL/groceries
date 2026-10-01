@@ -15,7 +15,7 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: "Roland's groceries",
   description:
-    "Weekly grocery list for Sydney shops — recipe lookup, list editing, and Coles / Woolworths cart-prep export.",
+    "Weekly grocery list for Sydney shops — recipe lookup, bill estimate, and Coles / Woolworths cart-fill handoff.",
 };
 
 export const viewport: Viewport = {
